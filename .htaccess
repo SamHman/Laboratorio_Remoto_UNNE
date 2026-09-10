@@ -1,0 +1,10 @@
+# Archivo .htaccess mínimo para LabVirtualUNNE
+# Solo deshabilita el listado de directorios para seguridad básica
+
+# Deshabilitar listado de directorios
+Options -Indexes
+
+# Permitir acceso a todos los archivos
+<RequireAll>
+    Require all granted
+</RequireAll>

@@ -1,0 +1,28 @@
+{
+  "name": "principal",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon --exec node app/index.js"
+  },
+  "keywords": [],
+  "author": "Gonzalez Olarte Carlos Samael",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "bootstrap": "^5.3.6",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
+    "mongoose": "^7.4.0",
+    "mysql2": "^3.14.2",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
