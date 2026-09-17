@@ -1,0 +1,101 @@
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: labvirtualunne_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-labvirtual}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/init:/docker-entrypoint-initdb.d:ro,z
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - backend
+
+  node:
+    build:
+      context: .
+      dockerfile: Dockerfile.node
+    container_name: labvirtualunne_node
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PORT: 4000
+      DB_HOST: mysql
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-labvirtual}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      JWT_COOKIE_EXPIRES: ${JWT_COOKIE_EXPIRES}
+      BRIDGE_TOKEN: ${BRIDGE_TOKEN}
+      INGEST_API_KEY: ${INGEST_API_KEY}
+    expose:
+      - "4000"
+    ports:
+      - "127.0.0.1:8155:4000"
+    networks:
+      - backend
+
+  php:
+    build:
+      context: .
+      dockerfile: Dockerfile.php
+    container_name: labvirtualunne_php
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./.env:/var/www/html/.env:ro,z
+      - php_logs:/var/www/html/logs
+    expose:
+      - "80"
+    networks:
+      - backend
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: labvirtualunne_nginx
+    restart: unless-stopped
+    depends_on:
+      - node
+      - php
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro,z
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro,z
+    expose:
+      - "80"
+    ports:
+      - "127.0.0.1:8154:80"
+    networks:
+      - backend
+      - prueba1_traefik-public
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=prueba1_traefik-public
+      - traefik.http.routers.labvirtualunne.rule=Host(`labvirtualunne.linkgestion.com`)
+      - traefik.http.routers.labvirtualunne.entrypoints=websecure
+      - traefik.http.routers.labvirtualunne.tls.certresolver=letsencrypt
+      - traefik.http.routers.labvirtualunne.service=labvirtualunne-nginx-svc
+      - traefik.http.services.labvirtualunne-nginx-svc.loadbalancer.server.port=80
+
+volumes:
+  mysql_data:
+  php_logs:
+
+networks:
+  backend:
+  prueba1_traefik-public:
+    external: true

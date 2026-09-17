@@ -10,6 +10,8 @@ import {methods as authentication} from "./controllers/authentication.controller
 import {methods as authorization} from "./middlewares/authorization.js";
 import {methods as privileges} from "./controllers/privileges.controller.js";
 import * as dataController from "./controllers/data.controller.js";
+import * as relayController from "./controllers/relay.controller.js";
+import * as telemetryController from "./controllers/telemetry.controller.js";
 
 // Server
 const app = express();
@@ -18,11 +20,48 @@ const PORT = process.env.PORT || 4000;
 // Crear el servidor HTTP
 const server = createServer(app);
 
-// Crear el servidor WebSocket
-const wss = new WebSocketServer({ server });
+// Dos WebSocketServer separados sobre el mismo HTTP server: uno para los
+// navegadores (broadcast de datos, sin path fijo) y otro para el agente-puente
+// on-prem (path /ws/bridge, autenticado con BRIDGE_TOKEN). Se despachan a mano
+// en el evento 'upgrade' del server porque dejar uno de los dos sin `path` haría
+// que ambas instancias intenten atender la misma conexión (ver docs de `ws`).
+const wss = new WebSocketServer({ noServer: true });
+const wssBridge = new WebSocketServer({ noServer: true });
+
+server.on("upgrade", (request, socket, head) => {
+    const { pathname } = new URL(request.url, `http://${request.headers.host}`);
+
+    if (pathname === "/ws/bridge") {
+        const token = request.headers["x-bridge-token"];
+        if (!token || token !== process.env.BRIDGE_TOKEN) {
+            socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+            socket.destroy();
+            return;
+        }
+        wssBridge.handleUpgrade(request, socket, head, (ws) => {
+            wssBridge.emit("connection", ws, request);
+        });
+    } else {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+            wss.emit("connection", ws, request);
+        });
+    }
+});
+
+wssBridge.on("connection", (ws) => {
+    console.log("Agente-puente conectado");
+    relayController.attachBridge(ws);
+});
 
 // Almacenar todos los clientes conectados
 const connectedClients = new Set();
+
+relayController.setBroadcastFn((payload) => {
+    const message = JSON.stringify(payload);
+    connectedClients.forEach((client) => {
+        if (client.readyState === 1) client.send(message);
+    });
+});
 
 // Almacenar datos en caché del servidor
 let serverCachedData = [];
@@ -74,7 +113,15 @@ wss.on('connection', (ws) => {
             timestamp: lastServerDataUpdate
         }));
     }
-    
+
+    // Enviar el estado actual de los relés (lo mantiene relayController, alimentado por el bridge)
+    ws.send(JSON.stringify({
+        type: 'relay_status',
+        relay1: relayController.relayStates[1] === 'on' ? 'ON' : 'OFF',
+        relay2: relayController.relayStates[2] === 'on' ? 'ON' : 'OFF',
+        relay3: relayController.relayStates[3] === 'on' ? 'ON' : 'OFF'
+    }));
+
     ws.on('close', () => {
         console.log('Cliente desconectado');
         connectedClients.delete(ws);
@@ -117,9 +164,12 @@ const shutdown = (signal) => {
     connectedClients.clear();
     console.log('Conexiones WebSocket cerradas');
     
-    // Cerrar el servidor WebSocket
+    // Cerrar los servidores WebSocket
     wss.close(() => {
         console.log('Servidor WebSocket cerrado');
+    });
+    wssBridge.close(() => {
+        console.log('Servidor WebSocket del bridge cerrado');
     });
     
     // Cerrar el servidor HTTP
@@ -190,5 +240,12 @@ app.post("/api/irradiancia", authorization.soloAdmin, dataController.insertIrrad
 
 // Ruta para guardar datos de sensores desde el ESP32
 app.post("/api/save-sensor-data", dataController.saveSensorData);
+
+// Control de relés: valida server-side las maniobras y reenvía al agente-puente
+app.post("/api/relay/command", authorization.soloAdmin, relayController.handleCommand);
+
+// Ingesta de telemetría (script DTU + agente-puente), autenticada por API key
+app.post("/api/telemetry/inversor", authorization.soloApiKey, telemetryController.ingestInversor);
+app.post("/api/telemetry/irradiancia", authorization.soloApiKey, telemetryController.ingestIrradiancia);
 
 

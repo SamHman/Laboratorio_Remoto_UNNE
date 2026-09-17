@@ -14,21 +14,6 @@ let userData = {
 let cachedData = [];
 let lastServerUpdate = 0;
 
-// API base URL: when UI is served from a dev server (localhost:4000),
-// point API calls to the real Apache/PHP server reachable on the network.
-// Update DEV_API_HOST if your server IP/port is different.
-const API_BASE = (function() {
-    const DEV_API_HOST = '10.40.136.255:4000'; // <-- change if needed
-    try {
-        if (window.location.hostname === 'localhost' && window.location.port === '4000') {
-            return 'http://' + DEV_API_HOST;
-        }
-    } catch (e) {
-        // fallback to current origin
-    }
-    return window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
-})();
-
 // Function to update username display in header
 function updateUsernameDisplay() {
     const usernameElement = document.getElementById('header-username');
@@ -42,17 +27,11 @@ function updateUsernameDisplay() {
     usernameElement.style.display = 'inline';
 }
 
-// Function to fetch user data (simplified - no privileges)
+// Function to fetch user data (simplificado - sin sistema de privilegios,
+// y sin endpoint de servidor: no hay ruta que devuelva el usuario logueado
+// a partir del JWT, así que se muestra el valor por defecto)
 async function fetchUserData() {
     try {
-        const response = await fetch('/api/check-privileges');
-        if (!response.ok) throw new Error('Error al obtener datos del usuario');
-        
-        const data = await response.json();
-        userData = {
-            username: data.username || 'Usuario'
-        };
-        
         updateUsernameDisplay();
         return userData;
     } catch (error) {
@@ -175,12 +154,18 @@ document.addEventListener('DOMContentLoaded', () => {
         
         globalDataWebSocket.onopen = () => {
             console.log('Conexión WebSocket global establecida');
+            relayManager.setConnectionStatus(true);
         };
-        
+
         globalDataWebSocket.onmessage = async (event) => {
             try {
                 const message = JSON.parse(event.data);
-                
+
+                if (message.type === 'relay_status') {
+                    relayManager.handleMessage(message);
+                    return;
+                }
+
                 if (message.type === 'initial_data' || message.type === 'data_update') {
                     console.log(`Datos recibidos del servidor (${message.type})`);
                     
@@ -228,9 +213,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         globalDataWebSocket.onclose = () => {
             console.log('Conexión WebSocket global cerrada, intentando reconectar...');
+            relayManager.setConnectionStatus(false);
             setTimeout(initGlobalDataWebSocket, 5000);
         };
-        
+
         globalDataWebSocket.onerror = (error) => {
             console.error('Error en la conexión WebSocket global:', error);
             globalDataWebSocket.close();
@@ -1124,41 +1110,10 @@ window.hideInverterFaultProgress = () => {
     }
 };
 
-// Hacer la función accesible globalmente
-window.iniciarActualizacionDashboard = function() {
-    
-    // --- MODIFICA ESTA RUTA ---
-    const baseUrl = `${window.location.protocol}//${window.location.hostname}`;
-    const apiUrl = `${baseUrl}/LabVirtualUNNE/app/api/flag_bot_trabajando.php`;
-    // -------------------------
-
-    // Hacemos la llamada 'fetch' a la API de PHP
-    fetch(apiUrl)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('La respuesta de la red no fue OK');
-            }
-            return response.json();
-        })
-        .then(data => {
-            // Leemos el flag 'Funcionando' que nos dio PHP
-            const estado = data.Funcionando; // Será 0 o 1
-            
-            // Determinamos el tiempo según el estado
-            // Si es 1 -> 150 segundos
-            // Si es 0 -> 90 segundos
-            const tiempo = (estado == 1) ? 150 : 90;
-            
-            // ¡Llamamos a la función de notificación con el tiempo correcto!
-            window.showDashboardUpdateProgress(tiempo);
-        })
-        .catch(error => {
-            console.error('Error al verificar el estado del dashboard:', error);
-            // Si hay un error (ej. la API falla), 
-            // mostramos la notificación con el tiempo por defecto (90s).
-            window.showDashboardUpdateProgress(90);
-        });
-}
+// NOTA: window.iniciarActualizacionDashboard() se retiró junto con
+// flag_bot_trabajando.php y ciclo_automatizado.bat (dependía del flag de
+// archivo que escribía el bot Python viejo, que ya no existe). Su único
+// llamador era registrarOrdenRelay(), también retirado.
 
 
     // Manejar la exportación de datos
@@ -1409,9 +1364,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-    // Configuración centralizada de relays - Una sola URL para el ESP32
+    // Configuración centralizada de relays. El ESP32 ya no es alcanzable directo
+    // desde el navegador (vive en la LAN de la facultad); el agente-puente on-prem
+    // es quien le habla, y acá solo necesitamos el mapeo a los elementos del DOM.
 	const relayConfig = {
-		url: 'ws://10.40.131.223:81/', // URL única del ESP32
 		relays: {
 			1: { elementId: 'esp8266-top' },
 			2: { elementId: 'esp8266-bottom' },
@@ -1443,28 +1399,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Verificación de privilegios eliminada - Todos los usuarios tienen acceso completo
 
 
-// Función para categorizar códigos de cierre de WebSocket
-function categorizeWebSocketClose(code, reason) {
-    const categories = {
-        1000: { category: 'Cierre Normal', description: 'Conexión cerrada correctamente por el servidor o cliente.' },
-        1001: { category: 'Cierre por Parte del Servidor', description: 'El servidor está cerrando la conexión.' },
-        1006: { category: 'Cierre Anormal', description: 'Conexión perdida inesperadamente (red, servidor caído, etc.). Verifica red y reiniciar ESP32.' },
-        1007: { category: 'Error de Datos', description: 'Datos inválidos recibidos.' },
-        1011: { category: 'Error Interno del Servidor', description: 'Error en el servidor WebSocket.' },
-        1012: { category: 'Reinicio del Servicio', description: 'Servicio WebSocket reiniciado.' }
-    };
-    return categories[code] || { category: 'Desconocido', description: `Código no estándar: ${code}. Razón: ${reason || 'Ninguna'}` };
-}
-
-// Gestión centralizada de WebSockets - Una sola conexión para el ESP32
+// Gestión centralizada del estado de los relés (llega vía WS de navegador / API de Node)
 const relayManager = {
-    // Socket único para el ESP32
-    globalSocket: null,
-    // Temporizador de reconexión único
-    reconnectTimer: null,
-    // Estado de conexión global
+    // Estado de conexión global: ahora refleja el WebSocket de navegador
+    // (globalDataWebSocket), no una conexión directa al ESP32.
     isConnectedGlobal: false,
-    
+
+    setConnectionStatus(connected) {
+        this.isConnectedGlobal = connected;
+        Object.keys(relayConfig.relays).forEach(num => {
+            const config = relayConfig.relays[num];
+            updateRelayVisual(config.elementId, connected ? (this.relayStates[num] || 'off') : 'disconnected');
+        });
+        this.updateInverterState();
+    },
+
     // Protección para la desconexión del Inversor (El inversor no se debe apagar!) Agregar una 3er subrutina de proteccion
     checkEmergencyManeuver(relayNum, command) {
         try {
@@ -1573,8 +1522,8 @@ const relayManager = {
         };
         
         await this.initEventListeners();
-        // Establece una sola conexión WebSocket al ESP32
-        this.connectGlobalSocket();
+        // El estado de conexión y de los relés ya no se piden a un socket propio:
+        // llegan por el WebSocket de navegador compartido (ver initGlobalDataWebSocket).
     },
     // Inicializar event listeners para los botones de relays
     async initEventListeners() {
@@ -1644,82 +1593,6 @@ const relayManager = {
             inverterBlock.style.border = 'none';
         }
     },
-    // Solicita el estado del ESP32
-    requestStatus() {
-        try {
-            if (this.globalSocket?.readyState === WebSocket.OPEN) {
-                this.globalSocket.send('get_status');
-            }
-        } catch (e) {
-            console.error('Error requesting status:', e);
-        }
-    },
-    // Conectar un solo WebSocket al ESP32
-    connectGlobalSocket() {
-        if (this.globalSocket) {
-            this.globalSocket.close();
-        }
-        
-        console.log('Conectando al ESP32:', relayConfig.url);
-        this.globalSocket = new WebSocket(relayConfig.url);
-        
-        this.globalSocket.onopen = (event) => {
-            console.log('WebSocket conectado al ESP32');
-            this.isConnectedGlobal = true;
-            
-            // Actualizar UI de todos los relays como conectados
-            Object.keys(relayConfig.relays).forEach(num => {
-                const config = relayConfig.relays[num];
-                updateRelayVisual(config.elementId, this.relayStates[num] || 'off');
-            });
-            
-            // Actualizar estado del inversor basado en los estados de relays
-            this.updateInverterState();
-            
-            // Solicitar estado actual
-            this.requestStatus();
-        };
-        
-        this.globalSocket.onclose = (event) => {
-            const closeInfo = categorizeWebSocketClose(event.code, event.reason);
-            console.log(`WebSocket cerrado. Código: ${event.code}, Razón: ${event.reason || 'Sin razón'}, Categoría: ${closeInfo.category}, Descripción: ${closeInfo.description}`);
-            this.isConnectedGlobal = false;
-            
-            // Marcar todos los relays como desconectados
-            Object.keys(relayConfig.relays).forEach(num => {
-                const config = relayConfig.relays[num];
-                updateRelayVisual(config.elementId, 'disconnected');
-            });
-            
-            // Actualizar estado del inversor basado en desconexión
-            this.updateInverterState();
-            
-            // Ocultar progreso de actualización de dashboard en caso de desconexión
-            //hideDashboardUpdateProgress();
-            
-            // Limpiar temporizador anterior
-            if (this.reconnectTimer) {
-                clearTimeout(this.reconnectTimer);
-            }
-            
-            // Auto-reconectar después de 5 segundos
-            this.reconnectTimer = setTimeout(() => {
-                console.log('Intentando reconectar al ESP32...');
-                this.connectGlobalSocket();
-            }, 5000);
-        };
-        
-        this.globalSocket.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            this.isConnectedGlobal = false;
-            
-        };
-        
-        this.globalSocket.onmessage = (event) => {
-            console.log('Mensaje recibido del ESP32:', event.data);
-            this.handleMessage(event.data);
-        };
-    },
     //esta es la función principal de control de los relay via Web
     async updateRelayState(relayNum, isOn) {
         const newState = isOn ? 'on' : 'off';
@@ -1749,116 +1622,61 @@ const relayManager = {
     },
     //Comunicación Bidireccional: Permite que el sistema reaccione a cambios de estado que ocurran directamente en el relé.
     //Esencial para garantizar que cualquier cambio en el estado físico de los relés se refleje correctamente en la interfaz de usuario del sistema SCADA.    
-    handleMessage(data) {
-        try {//parsed es para convertir el mensaje del ESP32 a un objeto JavaScript
-            const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-
+    handleMessage(parsed) {
+        try {
             if (parsed.relay1 !== undefined && parsed.relay2 !== undefined && parsed.relay3 !== undefined) {
-                // Actualizar estados de todos los relays basado en la respuesta JSON del ESP32
+                // Actualizar estados de todos los relays basado en el broadcast del servidor
                 this.updateRelayState(1, parsed.relay1 === 'ON');
                 this.updateRelayState(2, parsed.relay2 === 'ON');
                 this.updateRelayState(3, parsed.relay3 === 'ON');
-                
+
                 // Actualizar estado del inversor inmediatamente
                 this.updateInverterState();
-                
-                // Ocultar progreso de actualización de dashboard cuando se recibe respuesta del ESP32
-                //hideDashboardUpdateProgress();
-                
+
                 return;
             }
             // mensajes desconocidos se ignoran silenciosamente
         } catch (e) {
-            console.warn('Mensaje no válido del ESP32:', data);
+            console.warn('Mensaje de relay inválido:', parsed);
         }
     },
-    //comunicación
-    async sendCommand(relayNum, command) { 
+    // Envía el comando al backend Node, que valida server-side y lo reenvía
+    // al agente-puente (que a su vez le habla al ESP32). Ya no hay socket
+    // directo del navegador al ESP32.
+    async sendCommand(relayNum, command) {
         try {
-            // Verificar maniobra de emergencia antes de enviar
             const allowedEmergency = this.checkEmergencyManeuver(relayNum, command);
-            if (!allowedEmergency) {
-                return false;
-            }
+            if (!allowedEmergency) return false;
 
-            // Verificar maniobra de desconexión (Modo Caracterización)
             const allowedDisconnection = this.checkDisconnectionManeuver(relayNum, command);
-            if (!allowedDisconnection) {
-                return false;
-            }
+            if (!allowedDisconnection) return false;
 
-            // Verificar habilitación del inversor (Relay 3 ON solo si R1 y R2 ON)
             const allowedCommissioning = this.checkCommissioningManeuver(relayNum, command);
-            if (!allowedCommissioning) {
+            if (!allowedCommissioning) return false;
+
+            const response = await fetch('/api/relay/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ relayNum, action: command })
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                if (data.message && typeof showNotification === 'function') {
+                    showNotification(data.message, 'error');
+                }
+                console.error(`Error al enviar comando al relay ${relayNum}: HTTP ${response.status}`, data.message);
                 return false;
             }
 
-            if (!this.globalSocket || this.globalSocket.readyState !== WebSocket.OPEN) {
-                console.error('WebSocket no está conectado');
-                return false;
-            }
-
-            try {
-                const cmd = command === 'relay_on'
-                    ? `relay_on${relayNum}` 
-                    : `relay_off${relayNum}`;
-                this.globalSocket.send(cmd);
-                
-                // Registrar la orden en la API
-                await this.registrarOrdenRelay(relayNum, command);
-                
-                return true;
-            } catch (e) {
-                console.error(`Error al enviar comando al relay ${relayNum}:`, e);
-                return false;
-            }
+            return true;
         } catch (e) {
             console.error(`Error en sendCommand para Relay ${relayNum}:`, e);
             return false;
         }
     },
 
-    // Método para registrar la orden del relay en la API
-    async registrarOrdenRelay(relayNum, command) {
-        try {
-            const action = command === 'relay_on' ? 'ENCENDIDO' : 'APAGADO';
-            const timestamp = new Date().toISOString();
-            
-            // Usar baseUrl dinámica para compatibilidad con acceso desde otras PCs en la red
-            const baseUrl = `${window.location.protocol}//${window.location.hostname}`;
-            const apiUrl = `${baseUrl}/LabVirtualUNNE/app/api/crear_orden_relay.php`;
-            
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    relayNum: relayNum,
-                    action: action,
-                    timestamp: timestamp
-                })
-            });
-
-            if (!response.ok) {
-                console.error(`Error al registrar orden del relay ${relayNum}: HTTP ${response.status}`);
-                return;
-            }
-
-            const data = await response.json();
-            if (data.status === 'success') {
-                // Verificar el estado del dashboard después de registrar la orden
-                window.iniciarActualizacionDashboard();
-                console.log(`✅ Orden registrada: Relay ${relayNum} - ${action}`);
-            } else {
-                console.error(`Error en respuesta de API: ${data.message || 'Sin mensaje'}`);
-            }
-        } catch (error) {
-            console.error(`Error al registrar orden del relay ${relayNum}:`, error);
-            // No lanzamos el error para no interrumpir el flujo principal
-        }
-    },
-    
     // Verifica si el ESP32 está conectado
     isConnected() {
         return this.isConnectedGlobal;
@@ -1876,50 +1694,23 @@ const relayManager = {
         }
     },
     
-    // Verifica el estado del Relay 3 y muestra notificación si es necesario
-    async checkRelay3State(relayNum, command) {
-    try {
-        // Solo verificar si es el Relay 3 y se está encendiendo
-        if (relayNum === 3 && command === 'relay_on') {
-            const previousState = this.relayStates[3] === 'on';
-            
-            // Si el Relay 3 estaba apagado y se está encendiendo
-            if (!previousState && typeof window.InverterFaultProgress === 'function') {
-                window.InverterFaultProgress(true);
-                
-                // Llamar a la API de fault relay
-                try {
-                    const baseUrl = `${window.location.protocol}//${window.location.hostname}`;
-                    const apiUrl = `${baseUrl}/LabVirtualUNNE/app/api/crear_fault_relay.php`;
-                    
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    });
-
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        console.error(`Error al activar el contador de fault: HTTP ${response.status}`, errorText);
-                        return;
-                    }
-
-                    const data = await response.json();
-                    if (data.status === 'success') {
-                        console.log('✅ Contador de fault iniciado correctamente');
-                    }
-                } catch (error) {
-                    console.error('Error al llamar a crear_fault_relay.php:', error);
+    // Muestra la notificación de "fault" cuando el Relay 3 pasa de OFF a ON.
+    // El temporizador de 320s que antes armaba crear_fault_relay.php ahora
+    // corre server-side (ver app/controllers/relay.controller.js).
+    checkRelay3State(relayNum, command) {
+        try {
+            if (relayNum === 3 && command === 'relay_on') {
+                const previousState = this.relayStates[3] === 'on';
+                if (!previousState && typeof window.InverterFaultProgress === 'function') {
+                    window.InverterFaultProgress(true);
                 }
             }
+            return true;
+        } catch (error) {
+            console.error('Error en checkRelay3State:', error);
+            return true; // En caso de error, permitir la operación
         }
-        return true;
-    } catch (error) {
-        console.error('Error en checkRelay3State:', error);
-        return true; // En caso de error, permitir la operación
-    }
-},
+    },
     
     // Cambiar estado del relay
     async toggleRelay(relayNum) {
@@ -1967,8 +1758,8 @@ const relayManager = {
         this.setButtonCooldown(relayNum, true);
         
         // Solo enviamos el comando, NO actualizamos el estado visual todavía
-        const commandSent = this.sendCommand(relayNum, command);
-        
+        const commandSent = await this.sendCommand(relayNum, command);
+
         if (!commandSent) {
             console.error(`No se pudo enviar el comando al relay ${relayNum}`);
             this.setButtonCooldown(relayNum, false); // Revertir cooldown en caso de error
@@ -1980,11 +1771,9 @@ const relayManager = {
         // console.log(`Comando ${command} enviado exitosamente al relay ${relayNum}`);
         
         
-        // Programar el fin del cooldown
+        // Programar el fin del cooldown (el estado real llega solo, por WS, cuando el ESP32 lo confirme)
         setTimeout(() => {
             this.setButtonCooldown(relayNum, false);
-            // Verificar el estado real después del tiempo de espera
-            this.requestStatus();
         }, BUTTON_COOLDOWN_MS);
     },
     

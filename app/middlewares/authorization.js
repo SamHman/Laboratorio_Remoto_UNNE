@@ -44,7 +44,14 @@ function revisarCookie(req){
   }
 }
 
+function soloApiKey(req, res, next) {
+  const key = req.headers["x-api-key"];
+  if (key && key === process.env.INGEST_API_KEY) return next();
+  return res.status(401).json({ status: "error", message: "API key inválida o ausente" });
+}
+
 export const methods = {
   soloAdmin,
-  soloPublico
+  soloPublico,
+  soloApiKey
 }

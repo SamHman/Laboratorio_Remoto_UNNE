@@ -14,7 +14,7 @@ async function insertInversorData(req, res) {
         } = req.body;
 
         const query = `
-            INSERT INTO datos_Inversor (
+            INSERT INTO datos_inversor (
                 fecha_hora, Vpv1, Vpv2, Ipv1, Ipv2, 
                 Vac1, Vac2, Vac3, Iac1, Iac2, Iac3,
                 Fac1, Fac2, Fac3, Pac, EnergyToday, EnergyTotal, HourTotal
@@ -41,7 +41,7 @@ async function insertIrradianciaData(req, res) {
     try {
         const { fecha_hora, temperatura, irradiancia } = req.body;
 
-        const query = 'INSERT INTO datos_Irradiancia (fecha_hora, temperatura, irradiancia) VALUES (?, ?, ?)';
+        const query = 'INSERT INTO datos_irradiancia (fecha_hora, temperatura, irradiancia) VALUES (?, ?, ?)';
         const values = [fecha_hora || new Date(), temperatura, irradiancia];
 
         await db.query(query, values);

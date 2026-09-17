@@ -155,7 +155,7 @@ try {
 
     // Primero, obtener el conteo total de registros del inversor
     logExport('Contando registros en el rango de fechas...');
-    $countStmt = $pdo->prepare("SELECT COUNT(*) as total FROM datos_inversor WHERE fecha_hora BETWEEN :start AND :end AND archivo_origen LIKE '%.xls'");
+    $countStmt = $pdo->prepare("SELECT COUNT(*) as total FROM datos_inversor WHERE fecha_hora BETWEEN :start AND :end");
     $countStmt->execute([':start' => $start, ':end' => $end]);
     $totalRows = $countStmt->fetch()['total'];
     logExport('Total de registros encontrados', $totalRows);
@@ -171,8 +171,8 @@ try {
                 Fac1, Fac2, Fac3,
                 Pac, EnergyToday,
                 1 as source 
-             FROM datos_inversor 
-             WHERE fecha_hora <= :start AND archivo_origen LIKE '%.xls' ORDER BY fecha_hora DESC LIMIT 1)
+             FROM datos_inversor
+             WHERE fecha_hora <= :start ORDER BY fecha_hora DESC LIMIT 1)
             UNION ALL
             (SELECT 
                 fecha_hora, Vpv1, Vpv2, Ipv1, Ipv2,
@@ -181,8 +181,8 @@ try {
                 Fac1, Fac2, Fac3,
                 Pac, EnergyToday,
                 2 as source 
-             FROM datos_inversor 
-             WHERE fecha_hora >= :end AND archivo_origen LIKE '%.xls' ORDER BY fecha_hora ASC LIMIT 1)
+             FROM datos_inversor
+             WHERE fecha_hora >= :end ORDER BY fecha_hora ASC LIMIT 1)
             ORDER BY source
         ");
         $getNearestStmt->execute([':start' => $start, ':end' => $end]);
@@ -355,9 +355,8 @@ try {
             MIN(di.fecha_hora) as fecha_minima,
             MAX(di.fecha_hora) as fecha_maxima
         FROM datos_inversor di
-        WHERE di.fecha_hora BETWEEN :start AND :end 
-          AND di.archivo_origen LIKE '%.xls' 
-        GROUP BY 
+        WHERE di.fecha_hora BETWEEN :start AND :end
+        GROUP BY
             YEAR(di.fecha_hora), 
             MONTH(di.fecha_hora), 
             DAY(di.fecha_hora), 
