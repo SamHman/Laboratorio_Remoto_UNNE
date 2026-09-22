@@ -1,5 +1,6 @@
 -- Script SQL para crear la tabla datos_inversor
 -- Ejecutar en phpMyAdmin o MySQL Workbench
+-- Mantener en sync con sql/init/02_datos_inversor.sql (fuente de verdad para Docker)
 
 CREATE DATABASE IF NOT EXISTS labvirtual;
 USE labvirtual;
@@ -24,16 +25,14 @@ CREATE TABLE IF NOT EXISTS datos_inversor (
     EnergyToday DECIMAL(10,3) NULL COMMENT 'Energía del día',
     EnergyTotal DECIMAL(10,3) NULL COMMENT 'Energía total',
     HourTotal DECIMAL(10,3) NULL COMMENT 'Horas totales',
-    archivo_origen VARCHAR(255) NOT NULL COMMENT 'Nombre del archivo Excel origen',
+    origen VARCHAR(100) NOT NULL DEFAULT 'script-dtu' COMMENT 'Tag del origen del dato (ej. script-dtu)',
     fecha_importacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT 'Fecha de importación',
-    
+
     -- Índices para mejorar el rendimiento
     INDEX idx_fecha_hora (fecha_hora),
-    INDEX idx_archivo_origen (archivo_origen),
-    INDEX idx_fecha_importacion (fecha_importacion),
-    
-    -- Clave única para evitar duplicados
-    UNIQUE KEY unique_record (fecha_hora, archivo_origen)
+
+    -- Clave única para evitar duplicados: una fecha_hora es un único punto en el tiempo
+    UNIQUE KEY uq_datos_inversor_fecha_hora (fecha_hora)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Datos de inversores solares DTU';
 
 -- Crear un usuario específico para la aplicación (opcional)
