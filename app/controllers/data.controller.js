@@ -121,58 +121,8 @@ async function saveSensorData(req, res) {
     }
 }
 
-// Obtener datos del experimento
-async function getExperimentoData(req, res) {
-    try {
-        const limit = parseInt(req.query.limit) || 20;
-        const [rows] = await db.query(`
-            SELECT * FROM datos_experimento 
-            ORDER BY fecha_hora DESC 
-            LIMIT ?
-        `, [limit]);
-        
-        res.json({ 
-            status: "ok", 
-            data: rows.reverse() // Ordenar de más antiguo a más reciente para el gráfico
-        });
-    } catch (error) {
-        console.error("[getExperimentoData] Error:", error);
-        res.status(500).json({ 
-            status: "Error", 
-            message: "Error al obtener datos del experimento",
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
-    }
-}
-
-// Función interna para obtener datos (sin middleware de autorización)
-async function getExperimentoDataInternal() {
-    try {
-        const query = `
-            SELECT * FROM datos_experimento 
-            ORDER BY fecha_hora DESC 
-            LIMIT 720
-        `;
-        
-        const [rows] = await db.query(query);
-        
-        return {
-            status: 'ok',
-            data: rows.reverse() // Ordenar de más antiguo a más reciente
-        };
-    } catch (error) {
-        console.error('Error al obtener datos del experimento:', error);
-        return {
-            status: 'error',
-            message: 'Error al obtener datos del experimento'
-        };
-    }
-}
-
 // Exportar todas las funciones individualmente
 export {
-    getExperimentoData,
-    getExperimentoDataInternal,
     insertInversorData,
     insertIrradianciaData,
     saveSensorData

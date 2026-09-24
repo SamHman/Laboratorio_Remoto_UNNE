@@ -1,6 +1,6 @@
 // Constantes de configuración del dashboard
 
-export const CACHE_SIZE = 720;               // 1 hora de datos a 10 segundos por punto
+export const CACHE_SIZE = 720;               // registros que se piden y grafican (el tiempo que cubren depende de cada cuánto escribe el script del DTU)
 export const UI_UPDATE_INTERVAL = 10 * 1000; // mínimo entre actualizaciones del panel
 export const POLL_INTERVAL = 30 * 1000;      // consulta de datos nuevos al servidor
 export const CLICK_HOLD_TIME = 10 * 1000;    // cuánto se muestra un punto clickeado del gráfico

@@ -59,10 +59,12 @@ async function cargarDatos() {
 
 export function initDashboard() {
     crearPanel(document.getElementById('data-panel'));
-    initGraficos(onPointClick);
+    // Modales y exportación antes que los gráficos: si el CDN de Chart.js no carga,
+    // initGraficos falla pero exportar a Excel sigue funcionando.
     initModales();
-    document.querySelector('.expand-btn').addEventListener('click', abrirModalGrafico);
     initExportar();
+    initGraficos(onPointClick);
+    document.querySelector('.expand-btn').addEventListener('click', abrirModalGrafico);
 
     cargarDatos();
     setInterval(cargarDatos, POLL_INTERVAL);

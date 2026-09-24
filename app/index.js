@@ -62,56 +62,10 @@ relayController.setBroadcastFn((payload) => {
     });
 });
 
-// Almacenar datos en caché del servidor
-let serverCachedData = [];
-let lastServerDataUpdate = 0;
-
-// Almacenar el intervalo para poder limpiarlo al cerrar
-let dataUpdateInterval;
-
-// Función para enviar datos a todos los clientes conectados
-function broadcastToAllClients(data) {
-    const message = JSON.stringify({
-        type: 'data_update',
-        data: data,
-        timestamp: Date.now()
-    });
-    
-    connectedClients.forEach(client => {
-        if (client.readyState === 1) { // WebSocket.OPEN
-            client.send(message);
-        }
-    });
-}
-
-// Función para obtener datos del experimento y difundirlos
-async function fetchAndBroadcastData() {
-    try {
-        const result = await dataController.getExperimentoDataInternal();
-        if (result.status === 'ok' && result.data && result.data.length > 0) {
-            serverCachedData = result.data;
-            lastServerDataUpdate = Date.now();
-            broadcastToAllClients(result.data);
-            console.log(`Datos difundidos a ${connectedClients.size} clientes`);
-        }
-    } catch (error) {
-        console.error('Error al obtener y difundir datos:', error);
-    }
-}
-
 // Manejar conexiones WebSocket
 wss.on('connection', (ws) => {
     console.log('Nuevo cliente conectado');
     connectedClients.add(ws);
-    
-    // Enviar datos actuales al nuevo cliente
-    if (serverCachedData.length > 0) {
-        ws.send(JSON.stringify({
-            type: 'initial_data',
-            data: serverCachedData,
-            timestamp: lastServerDataUpdate
-        }));
-    }
 
     // Enviar el estado actual de los relés (lo mantiene relayController, alimentado por el bridge)
     ws.send(JSON.stringify({
@@ -136,24 +90,12 @@ wss.on('connection', (ws) => {
 server.listen(PORT, () => {
     console.log(`Servidor corriendo en puerto ${PORT}`);
     console.log(`WebSocket disponible en ws://localhost:${PORT}`);
-    
-    // Cargar datos iniciales
-    fetchAndBroadcastData();
-    
-    // Programar actualizaciones periódicas (cada 3 minutos)
-    dataUpdateInterval = setInterval(fetchAndBroadcastData, 3 * 60 * 1000);
 });
 
 // Manejo de señales para un cierre limpio
 const shutdown = (signal) => {
     console.log(`\nRecibida señal ${signal}. Cerrando servidor...`);
-    
-    // Limpiar el intervalo de actualización de datos
-    if (dataUpdateInterval) {
-        clearInterval(dataUpdateInterval);
-        console.log('Intervalo de actualización de datos limpiado');
-    }
-    
+
     // Cerrar todas las conexiones WebSocket
     connectedClients.forEach(client => {
         if (client.readyState === 1) { // WebSocket.OPEN
@@ -225,9 +167,6 @@ app.get("/SCADA", authorization.soloAdmin, (req, res) => res.sendFile(path.join(
 app.post("/api/login",authentication.login);
 app.post("/api/register",authentication.register);
 app.get("/api/whoami", authorization.soloAdmin, authentication.whoami);
-
-// Rutas de datos del sistema
-app.get("/api/obtener_datos_experimento.php", authorization.soloAdmin, dataController.getExperimentoData);
 
 // Rutas para insertar datos
 app.post("/api/inversor", authorization.soloAdmin, dataController.insertInversorData);

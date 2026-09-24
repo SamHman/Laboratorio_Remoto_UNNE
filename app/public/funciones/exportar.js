@@ -63,15 +63,14 @@ async function exportar(exportModal) {
             const nombre = `Mediciones_${formatearParaArchivo(startTime)}_${formatearParaArchivo(endTime)}.xlsx`;
             descargarArchivo(await response.blob(), nombre);
             showNotification('Datos exportados exitosamente', 'success');
+        } else if (response.ok) {
+            // 200 sin Excel: el PHP no encontró datos en el rango
+            showNotification('No se disponen de datos para el rango de fechas seleccionado.', 'warning');
         } else {
-            // El PHP responde JSON cuando no hay datos en el rango o cuando falla
-            try {
-                const data = await response.json();
-                showNotification(data.message || 'No existen datos en el intervalo seleccionado.', 'warning');
-            } catch (jsonError) {
-                console.error('[EXPORT] Respuesta no reconocida del servidor:', jsonError);
-                showNotification('Error al procesar la respuesta del servidor', 'error');
-            }
+            // 500: falla real del servidor (p. ej. sin conexión a la base), no falta de datos
+            const detalle = await response.text();
+            console.error(`[EXPORT] El servidor respondió ${response.status}:`, detalle.slice(0, 300));
+            showNotification(`Error del servidor al exportar (código ${response.status}).`, 'error');
         }
     } catch (error) {
         console.error('[EXPORT] Error al exportar:', error);
@@ -83,6 +82,16 @@ async function exportar(exportModal) {
 
 export function initExportar() {
     const exportModal = document.getElementById('export-modal');
+    const confirmButton = document.getElementById('confirm-export-btn');
     document.getElementById('export-icon').addEventListener('click', () => abrirModal(exportModal));
-    document.getElementById('confirm-export-btn').addEventListener('click', () => exportar(exportModal));
+
+    // Deshabilitado mientras dura una exportación, para no lanzar dos a la vez
+    confirmButton.addEventListener('click', async () => {
+        confirmButton.disabled = true;
+        try {
+            await exportar(exportModal);
+        } finally {
+            confirmButton.disabled = false;
+        }
+    });
 }
