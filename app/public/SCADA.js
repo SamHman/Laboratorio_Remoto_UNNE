@@ -1,3 +1,5 @@
+import { initLogout, initWhoami } from './funciones/session.js';
+
 // Constantes de configuración globales
 const UI_UPDATE_INTERVAL = 10 * 1000;            // 10 segundos (actualización de la interfaz)
 const CACHE_SIZE = 720; // 1 hora de datos a 10 segundos por punto
@@ -13,13 +15,8 @@ let userData = {
 };
 
 
-const logoutIcon = document.getElementById("logout-icon");
-if (logoutIcon) {
-    logoutIcon.addEventListener("click", () => {
-    document.cookie = 'jwt=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-    document.location.href = "/";
-    });
-}
+initLogout();
+initWhoami();
 //////////
 // Notificación reutilizable
 function showNotification(message, type = 'info') {//estos decorados puedo ponerlos en css en su lugar?
