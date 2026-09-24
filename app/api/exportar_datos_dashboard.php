@@ -170,7 +170,7 @@ try {
                 Iac1, Iac2, Iac3,
                 Fac1, Fac2, Fac3,
                 Pac, EnergyToday,
-                1 as source 
+                1 as source
              FROM datos_inversor
              WHERE fecha_hora <= :start ORDER BY fecha_hora DESC LIMIT 1)
             UNION ALL
@@ -180,7 +180,7 @@ try {
                 Iac1, Iac2, Iac3,
                 Fac1, Fac2, Fac3,
                 Pac, EnergyToday,
-                2 as source 
+                2 as source
              FROM datos_inversor
              WHERE fecha_hora >= :end ORDER BY fecha_hora ASC LIMIT 1)
             ORDER BY source

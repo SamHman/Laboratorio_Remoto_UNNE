@@ -8,7 +8,6 @@ import { WebSocketServer } from 'ws';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import {methods as authentication} from "./controllers/authentication.controller.js"
 import {methods as authorization} from "./middlewares/authorization.js";
-import {methods as privileges} from "./controllers/privileges.controller.js";
 import * as dataController from "./controllers/data.controller.js";
 import * as relayController from "./controllers/relay.controller.js";
 import * as telemetryController from "./controllers/telemetry.controller.js";
@@ -225,11 +224,7 @@ app.get("/SCADA", authorization.soloAdmin, (req, res) => res.sendFile(path.join(
 // Rutas de autenticación
 app.post("/api/login",authentication.login);
 app.post("/api/register",authentication.register);
-
-// Rutas de privilegios : Se diseñó en caso de que multiples usuarios quisieran utilizar el laboratorio remoto a la vez.
-//app.get("/api/check-privileges", authorization.soloAdmin, privileges.checkPrivileges);
-//app.post("/api/grant-privileges", authorization.soloAdmin, privileges.grantPrivileges);
-//app.post("/api/revoke-privileges", authorization.soloAdmin, privileges.revokePrivileges);
+app.get("/api/whoami", authorization.soloAdmin, authentication.whoami);
 
 // Rutas de datos del sistema
 app.get("/api/obtener_datos_experimento.php", authorization.soloAdmin, dataController.getExperimentoData);

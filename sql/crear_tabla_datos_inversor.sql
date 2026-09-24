@@ -39,4 +39,3 @@ CREATE TABLE IF NOT EXISTS datos_inversor (
 -- CREATE USER 'labvirtual_user'@'localhost' IDENTIFIED BY 'password123';
 -- GRANT SELECT, INSERT, UPDATE ON labvirtual.datos_inversor TO 'labvirtual_user'@'localhost';
 -- FLUSH PRIVILEGES;
-

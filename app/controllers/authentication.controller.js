@@ -62,7 +62,18 @@ async function register(req,res){
   }
 }
 
+function whoami(req, res) {
+  try {
+    const token = req.cookies.jwt;
+    const decodificada = jsonwebtoken.verify(token, process.env.JWT_SECRET);
+    return res.send({ status: "ok", username: decodificada.user });
+  } catch (error) {
+    return res.status(401).send({ status: "Error", message: "No autenticado" });
+  }
+}
+
 export const methods = {
   login,
-  register
+  register,
+  whoami
 }
