@@ -1,0 +1,105 @@
+/* Notificación reutilizable (funciones/notificaciones.js, showNotification).
+   Las animaciones slideIn/slideOut siguen definidas en styleSCADA.css. */
+.export-notif {
+    position: fixed;
+    top: 60px;
+    right: 20px;
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    font-weight: bold;
+    z-index: 1000;
+    animation: slideIn 0.3s ease-out;
+}
+
+.export-notif.notif-success {
+    background: #16a34a;
+}
+
+.export-notif.notif-error {
+    background: #dc2626;
+}
+
+.export-notif.notif-info,
+.export-notif.notif-warning {
+    background: #f59e0b;
+}
+
+.export-notif.notif-out {
+    animation: slideOut 0.3s ease-in;
+}
+
+/* Notificación de progreso con spinner y cuenta regresiva (mostrarProgreso).
+   La animación spin está definida en styleSCADA.css. (CARLOS: revisarla y agregarla aquí) */
+.progress-notif {
+    position: fixed;
+    top: 100px;
+    right: 20px;
+    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+    color: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    font-weight: bold;
+    z-index: 10000;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-width: 280px;
+    animation: slideIn 0.3s ease-out;
+}
+
+.progress-notif.notif-out {
+    animation: slideOut 0.3s ease-out;
+}
+
+.progress-notif-body {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.notif-spinner {
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.progress-notif-title {
+    font-size: 14px;
+}
+
+.progress-notif-countdown {
+    font-size: 12px;
+    opacity: 0.9;
+    margin-top: 4px;
+}
+
+/* Panel de datos: valores que vienen del sensor de irradiancia/temperatura */
+.data-item .value.sensor {
+    color: #00aaff;
+}
+
+/* Modales: se abren agregando .is-open (funciones/modales.js) */
+.modal.is-open {
+    display: flex;
+}
+
+/* Gráfico principal: Chart.js con maintainAspectRatio:false toma el alto del contenedor,
+   y .chart-container no tiene alto propio (en pantallas angostas colapsaba). */
+#chart-container-main {
+    min-height: 400px;
+}
+
+/* Modal del gráfico: styleSCADA.css define .modal-content dos veces y la segunda
+   (blanca, máx. 400px, sin alto) pisa a la primera y deja al canvas sin espacio. (CARLOS: revisar esa lógica) */
+#chart-modal .modal-content {
+    width: 90vw;
+    max-width: none;
+    height: 85vh;
+    background-color: var(--secondary-bg);
+    border: none;
+    border-radius: 8px;
+    padding: 25px;
+    text-align: initial;
+}
