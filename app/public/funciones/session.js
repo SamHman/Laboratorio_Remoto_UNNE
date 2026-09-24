@@ -17,8 +17,13 @@ export async function initWhoami() {
         const usernameEl = document.getElementById('header-username');
         if (usernameEl && data.username) {
             usernameEl.textContent = data.username;
+        } else {
+            console.error('[whoami] No se pudo obtener el nombre de usuario:', data.message || 'respuesta sin username');
         }
     } catch (e) {
         // si falla, el span queda con el texto inicial ("Cargando...")
+        //comentario: podemos usar esta lógica a futuro para mostrar otros
+        //usuarios conectados
+        console.error('[whoami] Error al consultar /api/whoami:', e);
     }
 }
