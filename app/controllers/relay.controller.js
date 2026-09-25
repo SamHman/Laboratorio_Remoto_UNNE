@@ -7,6 +7,11 @@ import { registrarManiobra } from "../services/maniobras.js";
 const relayStates = { 1: "on", 2: "on", 3: "on" };
 
 let bridgeSocket = null;
+// Estado real del ESP32 (bridge-agent -> mensaje "esp_status"), distinto de
+// isBridgeConnected(): el bridge-agent puede estar arriba y conectado a la VPS
+// mientras el ESP32 esté apagado/inalcanzable. Arranca en false (fail-safe):
+// hasta que no llegue un "esp_status" fresco no asumimos que el ESP32 está.
+let esp32Connected = false;
 let broadcastToBrowsers = () => {};
 let faultTimer = null;
 const FAULT_DELAY_MS = 320 * 1000;
@@ -17,6 +22,7 @@ function setBroadcastFn(fn) {
 
 function attachBridge(ws) {
     bridgeSocket = ws;
+    esp32Connected = false; // se corrige apenas llegue el próximo "esp_status" del bridge-agent
     broadcastRelayStatus();
     ws.on("message", (raw) => handleBridgeMessage(raw));
     ws.on("close", () => {
@@ -33,15 +39,18 @@ function isBridgeConnected() {
 
 // Payload que espera el frontend (funciones/relay.js): estado de los 3 relés +
 // espConnected, para poder avisar "sin conexión" sin depender de que un
-// POST /api/relay/command falle con 503. getRelayStatusPayload() también la usa
-// app/index.js para el mensaje inicial al conectar un navegador nuevo.
+// POST /api/relay/command falle con 503. espConnected exige bridge-agent Y
+// ESP32 conectados a la vez (ver esp32Connected arriba) - antes solo miraba
+// el bridge-agent, y mostraba "conectado" aunque el ESP32 estuviera apagado.
+// getRelayStatusPayload() también la usa app/index.js para el mensaje inicial
+// al conectar un navegador nuevo.
 function getRelayStatusPayload() {
     return {
         type: "relay_status",
         relay1: relayStates[1],
         relay2: relayStates[2],
         relay3: relayStates[3],
-        espConnected: isBridgeConnected()
+        espConnected: isBridgeConnected() && esp32Connected
     };
 }
 
@@ -60,6 +69,9 @@ function handleBridgeMessage(raw) {
 
     if (msg.type === "relay_status") {
         updateStateFromEsp32(msg);
+    } else if (msg.type === "esp_status") {
+        esp32Connected = !!msg.connected;
+        broadcastRelayStatus();
     }
 }
 
@@ -150,6 +162,9 @@ async function handleCommand(req, res) {
 
     if (!isBridgeConnected()) {
         return res.status(503).json({ status: "error", message: "El agente-puente no está conectado, no se puede alcanzar el ESP32" });
+    }
+    if (!esp32Connected) {
+        return res.status(503).json({ status: "error", message: "El ESP32 de relés no está conectado" });
     }
 
     const wasRelay3On = relayStates[3] === "on";

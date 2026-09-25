@@ -3,7 +3,9 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const ESP32_RELAY_WS_URL = process.env.ESP32_RELAY_WS_URL || "ws://10.40.131.223:81/";
+// ESP32 nuevo en 10.40.131.240 (reemplaza al que estaba en 10.40.131.223,
+// ver ESP32_relayController_V5.ino) - cambiar acá si la IP real es otra.
+const ESP32_RELAY_WS_URL = process.env.ESP32_RELAY_WS_URL || "ws://10.40.131.240:81/";
 const VPS_BRIDGE_WS_URL = process.env.VPS_BRIDGE_WS_URL || "ws://localhost:4000/ws/bridge";
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN;
 const RECONNECT_DELAY_MS = 5000;
@@ -64,6 +66,7 @@ function startRelayConnection() {
             onOpen: (ws) => {
                 console.log("[esp32-relay] -> get_status");
                 ws.send("get_status");
+                sendToVps({ type: "esp_status", connected: true });
             },
             onMessage: (ws, data) => {
                 let parsed;
@@ -85,7 +88,10 @@ function startRelayConnection() {
                     console.log("[esp32-relay] JSON sin relay1/2/3, se ignora:", parsed);
                 }
             },
-            onClose: () => { relaySocket = null; }
+            onClose: () => {
+                relaySocket = null;
+                sendToVps({ type: "esp_status", connected: false });
+            }
         }
     );
 
@@ -108,6 +114,12 @@ function startVpsConnection() {
         VPS_BRIDGE_WS_URL,
         {
             assign: (ws) => { vpsSocket = ws; },
+            onOpen: () => {
+                // Por si relaySocket ya estaba abierto/cerrado antes de que esta conexión
+                // existiera (o en una reconexión): la VPS necesita el estado actual ya,
+                // no solo el próximo cambio.
+                sendToVps({ type: "esp_status", connected: !!(relaySocket && relaySocket.readyState === WebSocket.OPEN) });
+            },
             onMessage: (ws, data) => {
                 let msg;
                 try {
