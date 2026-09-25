@@ -126,15 +126,20 @@ function parseDecimalComa(raw) {
     return Number.isFinite(n) ? n : null;
 }
 
+const UPSERT_CHUNK_SIZE = 500;
+
 async function upsertRows(rows) {
-    const placeholders = rows.map(() => '(?, ?, ?, NOW())').join(', ');
-    const values = rows.flat();
-    await db.query(
-        `INSERT INTO datos_irradiancia (fecha_hora, irradiancia, temperatura, fecha_importacion)
-         VALUES ${placeholders}
-         ON DUPLICATE KEY UPDATE irradiancia = VALUES(irradiancia), temperatura = VALUES(temperatura), fecha_importacion = NOW()`,
-        values
-    );
+    for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
+        const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE);
+        const placeholders = chunk.map(() => '(?, ?, ?, NOW())').join(', ');
+        const values = chunk.flat();
+        await db.query(
+            `INSERT INTO datos_irradiancia (fecha_hora, irradiancia, temperatura, fecha_importacion)
+             VALUES ${placeholders}
+             ON DUPLICATE KEY UPDATE irradiancia = VALUES(irradiancia), temperatura = VALUES(temperatura), fecha_importacion = NOW()`,
+            values
+        );
+    }
 }
 
 async function syncOnce(serviceAccountKey, spreadsheetId, gid) {
@@ -143,22 +148,25 @@ async function syncOnce(serviceAccountKey, spreadsheetId, gid) {
     const rows = await fetchSheetRows(accessToken, spreadsheetId, sheetTitle);
     if (rows.length === 0) return;
 
-    const [[{ maxFecha } = {}]] = await db.query('SELECT MAX(fecha_hora) as maxFecha FROM datos_irradiancia');
-    const lastKnown = maxFecha ? new Date(maxFecha).getTime() : null;
-
-    const toInsert = [];
+    // Se resincroniza el rango completo en cada ciclo en vez de filtrar por
+    // MAX(fecha_hora): esa comparación se probó frágil apenas la tabla tiene
+    // filas con fechas que no vienen del propio Sheet (ej. datos dummy/de
+    // prueba con timestamps más "nuevos" que el historial real), porque
+    // bloqueaba silenciosamente la sincronización entera. El upsert por
+    // fecha_hora ya es idempotente, así que reenviar todo es seguro; el
+    // costo (unas pocas centenas de filas por ciclo, por ahora) es aceptable
+    // mientras el Sheet no crezca a decenas de miles de filas.
+    const toUpsert = [];
     for (const row of rows) {
         const [rawFecha, rawIrr, rawTemp] = row;
         const fecha_hora = parseFechaHora(rawFecha || '');
         if (!fecha_hora) continue;
-        const fechaMs = new Date(fecha_hora.replace(' ', 'T')).getTime();
-        if (lastKnown !== null && fechaMs <= lastKnown) continue;
-        toInsert.push([fecha_hora, parseDecimalComa(rawIrr), parseDecimalComa(rawTemp)]);
+        toUpsert.push([fecha_hora, parseDecimalComa(rawIrr), parseDecimalComa(rawTemp)]);
     }
 
-    if (toInsert.length > 0) {
-        await upsertRows(toInsert);
-        console.log(`[irradianciaSync] ${toInsert.length} fila(s) nueva(s) sincronizada(s) desde el Sheet`);
+    if (toUpsert.length > 0) {
+        await upsertRows(toUpsert);
+        console.log(`[irradianciaSync] ${toUpsert.length} fila(s) sincronizada(s) desde el Sheet`);
     }
 }
 
