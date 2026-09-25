@@ -1,10 +1,9 @@
 # Agente-puente LabVirtualUNNE
 
-Corre en una PC de la facultad con visibilidad de red a los dos ESP32
-(el de relés y el de irradiancia/temperatura, en la LAN `10.40.x.x`). Es el
-único proceso autorizado a hablarles: mantiene una conexión saliente hacia la
-API en la VPS y reenvía comandos/estado en las dos direcciones. No corre en la
-VPS ni entra al `docker-compose.yml` del proyecto.
+Corre en una PC de la facultad con visibilidad de red al ESP32 de relés
+(LAN `10.40.x.x`). Es el único proceso autorizado a hablarle: mantiene una
+conexión saliente hacia la API en la VPS y reenvía comandos/estado en las dos
+direcciones. No corre en la VPS ni entra al `docker-compose.yml` del proyecto.
 
 ## Instalación
 
@@ -21,12 +20,12 @@ npm start
 
 - Se conecta como cliente WebSocket al ESP32 de relés (`ESP32_RELAY_WS_URL`) y
   reenvía su estado (`relay1/2/3`) a la VPS cada vez que cambia.
-- Se conecta como cliente WebSocket al ESP32 de irradiancia (`ESP32_SENSOR_WS_URL`)
-  y reenvía cada lectura de temperatura/irradiancia a la VPS.
 - Se conecta a la VPS (`VPS_BRIDGE_WS_URL`, autenticado con `BRIDGE_TOKEN` en el
   header `x-bridge-token`) y reenvía al ESP32 de relés los comandos
   (`relay_on1`, `relay_off2`, etc.) que la API ya validó server-side.
-- Reconecta automáticamente cada 5s si se cae cualquiera de las tres conexiones.
+- Reconecta automáticamente cada 5s si se cae cualquiera de las dos conexiones.
+- El sensor de irradiancia/temperatura quedó fuera del proyecto (decisión del
+  usuario) — este agente no lo maneja.
 
 ## Correrlo como servicio
 

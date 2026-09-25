@@ -4,7 +4,6 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const ESP32_RELAY_WS_URL = process.env.ESP32_RELAY_WS_URL || "ws://10.40.131.223:81/";
-const ESP32_SENSOR_WS_URL = process.env.ESP32_SENSOR_WS_URL || "";
 const VPS_BRIDGE_WS_URL = process.env.VPS_BRIDGE_WS_URL || "ws://localhost:4000/ws/bridge";
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN;
 const RECONNECT_DELAY_MS = 5000;
@@ -102,38 +101,6 @@ function startRelayConnection() {
     }, PING_INTERVAL_MS);
 }
 
-// --- ESP32 de irradiancia/temperatura (opcional: si no hay URL configurada, no se
-// intenta conectar — evita reintentos infinitos contra un dispositivo que no existe) ---
-function startSensorConnection() {
-    if (!ESP32_SENSOR_WS_URL) {
-        console.log("[esp32-sensor] ESP32_SENSOR_WS_URL no configurada, no se intenta conectar.");
-        return;
-    }
-
-    connectWithRetry(
-        "esp32-sensor",
-        ESP32_SENSOR_WS_URL,
-        {
-            onMessage: (ws, data) => {
-                let parsed;
-                try {
-                    parsed = JSON.parse(data.toString());
-                } catch (e) {
-                    return;
-                }
-                if (parsed.temperatura !== undefined && parsed.irradiancia !== undefined) {
-                    sendToVps({
-                        type: "irradiancia",
-                        temperatura: parsed.temperatura,
-                        irradiancia: parsed.irradiancia,
-                        fecha_hora: new Date().toISOString().slice(0, 19).replace("T", " ")
-                    });
-                }
-            }
-        }
-    );
-}
-
 // --- Conexión saliente hacia la VPS ---
 function startVpsConnection() {
     connectWithRetry(
@@ -173,7 +140,6 @@ function sendToVps(payload) {
 }
 
 startRelayConnection();
-startSensorConnection();
 startVpsConnection();
 
 process.on("SIGINT", () => process.exit(0));
