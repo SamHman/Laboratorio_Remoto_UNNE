@@ -7,8 +7,11 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Cargar variables de entorno
-const envPath = path.resolve(__dirname, '../../.env');
+// Cargar variables de entorno (db.js vive en app/, el .env esta un nivel arriba,
+// en la raiz del proyecto - antes apuntaba dos niveles arriba y nunca encontraba
+// el archivo; no rompia nada porque otro modulo ya cargaba el .env correcto
+// antes de que este pool se armara, pero quedaba pisando en falso)
+const envPath = path.resolve(__dirname, '../.env');
 dotenv.config({ path: envPath });
 
 // Configuración de la conexión

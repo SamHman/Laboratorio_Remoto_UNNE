@@ -3,6 +3,7 @@ vendor/
 logs/*.log
 logs/*.txt
 .env
+credentials/
 *.log
 .DS_Store
 Thumbs.db

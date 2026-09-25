@@ -1,11 +1,4 @@
-// Control de relés. El navegador YA NO habla con el ESP32 directo (eso quedó en
-// SCADA Copia_Seguridad.js, descartado a propósito): el único cliente autorizado
-// del ESP32 es el bridge-agent, que le manda su estado a la VPS por WS y la VPS
-// lo reenvía acá. Los comandos van por POST /api/relay/command.
-//
-// Los tres interlocks de seguridad ya están portados en el servidor
-// (relay.controller.js) y son la fuente de verdad — acá se repiten solo para
-// dar feedback instantáneo sin esperar la respuesta del POST.
+
 
 import { showNotification, mostrarProgreso } from './notificaciones.js';
 

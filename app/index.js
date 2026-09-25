@@ -11,6 +11,7 @@ import {methods as authorization} from "./middlewares/authorization.js";
 import * as dataController from "./controllers/data.controller.js";
 import * as relayController from "./controllers/relay.controller.js";
 import * as telemetryController from "./controllers/telemetry.controller.js";
+import { startIrradianciaSync } from "./services/irradianciaSync.js";
 
 // Server
 const app = express();
@@ -86,6 +87,9 @@ server.listen(PORT, () => {
     console.log(`Servidor corriendo en puerto ${PORT}`);
     console.log(`WebSocket disponible en ws://localhost:${PORT}`);
 });
+
+// Sincronización periódica del Sheet de irradiancia/temperatura -> datos_irradiancia
+startIrradianciaSync();
 
 // Manejo de señales para un cierre limpio
 const shutdown = (signal) => {

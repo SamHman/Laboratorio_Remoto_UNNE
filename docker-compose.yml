@@ -41,6 +41,12 @@ services:
       JWT_COOKIE_EXPIRES: ${JWT_COOKIE_EXPIRES}
       BRIDGE_TOKEN: ${BRIDGE_TOKEN}
       INGEST_API_KEY: ${INGEST_API_KEY}
+      GOOGLE_SHEETS_KEY_FILE: ${GOOGLE_SHEETS_KEY_FILE:-./credentials/google-sheets-irradiancia.json}
+      GOOGLE_SHEETS_IRRADIANCIA_ID: ${GOOGLE_SHEETS_IRRADIANCIA_ID}
+      GOOGLE_SHEETS_IRRADIANCIA_GID: ${GOOGLE_SHEETS_IRRADIANCIA_GID:-0}
+      IRRADIANCIA_POLL_INTERVAL_MS: ${IRRADIANCIA_POLL_INTERVAL_MS:-60000}
+    volumes:
+      - ./credentials:/app/credentials:ro,z
     expose:
       - "4000"
     ports:
