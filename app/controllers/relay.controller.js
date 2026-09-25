@@ -17,14 +17,36 @@ function setBroadcastFn(fn) {
 
 function attachBridge(ws) {
     bridgeSocket = ws;
+    broadcastRelayStatus();
     ws.on("message", (raw) => handleBridgeMessage(raw));
     ws.on("close", () => {
-        if (bridgeSocket === ws) bridgeSocket = null;
+        if (bridgeSocket === ws) {
+            bridgeSocket = null;
+            broadcastRelayStatus();
+        }
     });
 }
 
 function isBridgeConnected() {
     return !!bridgeSocket && bridgeSocket.readyState === 1; // WebSocket.OPEN
+}
+
+// Payload que espera el frontend (funciones/relay.js): estado de los 3 relés +
+// espConnected, para poder avisar "sin conexión" sin depender de que un
+// POST /api/relay/command falle con 503. getRelayStatusPayload() también la usa
+// app/index.js para el mensaje inicial al conectar un navegador nuevo.
+function getRelayStatusPayload() {
+    return {
+        type: "relay_status",
+        relay1: relayStates[1],
+        relay2: relayStates[2],
+        relay3: relayStates[3],
+        espConnected: isBridgeConnected()
+    };
+}
+
+function broadcastRelayStatus() {
+    broadcastToBrowsers(getRelayStatusPayload());
 }
 
 async function handleBridgeMessage(raw) {
@@ -57,12 +79,7 @@ function updateStateFromEsp32(msg) {
         faultTimer = null;
     }
 
-    broadcastToBrowsers({
-        type: "relay_status",
-        relay1: relayStates[1],
-        relay2: relayStates[2],
-        relay3: relayStates[3]
-    });
+    broadcastRelayStatus();
 }
 
 // Puertos de las tres validaciones que antes vivían solo en SCADA.js (relayManager).
@@ -162,6 +179,7 @@ export {
     setBroadcastFn,
     attachBridge,
     isBridgeConnected,
+    getRelayStatusPayload,
     handleCommand,
     relayStates
 };

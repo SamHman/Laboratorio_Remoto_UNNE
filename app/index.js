@@ -68,12 +68,7 @@ wss.on('connection', (ws) => {
     connectedClients.add(ws);
 
     // Enviar el estado actual de los relés (lo mantiene relayController, alimentado por el bridge)
-    ws.send(JSON.stringify({
-        type: 'relay_status',
-        relay1: relayController.relayStates[1] === 'on' ? 'ON' : 'OFF',
-        relay2: relayController.relayStates[2] === 'on' ? 'ON' : 'OFF',
-        relay3: relayController.relayStates[3] === 'on' ? 'ON' : 'OFF'
-    }));
+    ws.send(JSON.stringify(relayController.getRelayStatusPayload()));
 
     ws.on('close', () => {
         console.log('Cliente desconectado');
