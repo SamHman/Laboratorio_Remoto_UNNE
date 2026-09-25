@@ -4,14 +4,21 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const ESP32_RELAY_WS_URL = process.env.ESP32_RELAY_WS_URL || "ws://10.40.131.223:81/";
-const ESP32_SENSOR_WS_URL = process.env.ESP32_SENSOR_WS_URL || "ws://10.40.131.230:81/";
+const ESP32_SENSOR_WS_URL = process.env.ESP32_SENSOR_WS_URL || "";
 const VPS_BRIDGE_WS_URL = process.env.VPS_BRIDGE_WS_URL || "ws://localhost:4000/ws/bridge";
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN;
 const RECONNECT_DELAY_MS = 5000;
+const PING_INTERVAL_MS = 20000;
 
 if (!BRIDGE_TOKEN) {
     console.error("Falta BRIDGE_TOKEN en el entorno. Abortando.");
     process.exit(1);
+}
+
+const READY_STATE_NAMES = ["CONNECTING", "OPEN", "CLOSING", "CLOSED"];
+function readyStateName(ws) {
+    if (!ws) return "sin socket (null)";
+    return READY_STATE_NAMES[ws.readyState] || `desconocido (${ws.readyState})`;
 }
 
 let relaySocket = null;
@@ -31,12 +38,13 @@ function connectWithRetry(name, url, { onOpen, onMessage, onClose, assign } = {}
     });
 
     ws.on("message", (data) => {
+        console.log(`[${name}] <- mensaje crudo:`, data.toString());
         if (onMessage) onMessage(ws, data);
     });
 
-    ws.on("close", () => {
-        console.log(`[${name}] Desconectado, reintentando en ${RECONNECT_DELAY_MS / 1000}s...`);
-        if (onClose) onClose();
+    ws.on("close", (code, reason) => {
+        console.log(`[${name}] Desconectado (code=${code}, reason="${reason}"), reintentando en ${RECONNECT_DELAY_MS / 1000}s...`);
+        if (onClose) onClose(code, reason);
         setTimeout(() => connectWithRetry(name, url, { onOpen, onMessage, onClose, assign }, options), RECONNECT_DELAY_MS);
     });
 
@@ -54,36 +62,54 @@ function startRelayConnection() {
         ESP32_RELAY_WS_URL,
         {
             assign: (ws) => { relaySocket = ws; },
-            onOpen: (ws) => ws.send("get_status"),
+            onOpen: (ws) => {
+                console.log("[esp32-relay] -> get_status");
+                ws.send("get_status");
+            },
             onMessage: (ws, data) => {
                 let parsed;
                 try {
                     parsed = JSON.parse(data.toString());
                 } catch (e) {
-                    return; // "pong" u otro texto plano, se ignora
+                    console.log("[esp32-relay] mensaje no-JSON (probablemente 'pong'), se ignora");
+                    return;
                 }
                 if (parsed.relay1 !== undefined && parsed.relay2 !== undefined && parsed.relay3 !== undefined) {
+                    console.log(`[esp32-relay] estado: relay1=${parsed.relay1} relay2=${parsed.relay2} relay3=${parsed.relay3}`);
                     sendToVps({
                         type: "relay_status",
                         relay1: parsed.relay1,
                         relay2: parsed.relay2,
                         relay3: parsed.relay3
                     });
+                } else {
+                    console.log("[esp32-relay] JSON sin relay1/2/3, se ignora:", parsed);
                 }
-            }
+            },
+            onClose: () => { relaySocket = null; }
         }
     );
 
-    // Keepalive: el firmware responde 'pong' a 'ping' (ver ESP32_relayController_V4.ino)
+    // Keepalive: el firmware responde 'pong' a 'ping' (confirmado en
+    // ESP32_relayController_V5.ino:177-179, mismo protocolo que V4).
     setInterval(() => {
         if (relaySocket && relaySocket.readyState === WebSocket.OPEN) {
+            console.log("[esp32-relay] -> ping (keepalive)");
             relaySocket.send("ping");
+        } else {
+            console.log(`[esp32-relay] keepalive salteado, socket en estado: ${readyStateName(relaySocket)}`);
         }
-    }, 20000);
+    }, PING_INTERVAL_MS);
 }
 
-// --- ESP32 de irradiancia/temperatura ---
+// --- ESP32 de irradiancia/temperatura (opcional: si no hay URL configurada, no se
+// intenta conectar — evita reintentos infinitos contra un dispositivo que no existe) ---
 function startSensorConnection() {
+    if (!ESP32_SENSOR_WS_URL) {
+        console.log("[esp32-sensor] ESP32_SENSOR_WS_URL no configurada, no se intenta conectar.");
+        return;
+    }
+
     connectWithRetry(
         "esp32-sensor",
         ESP32_SENSOR_WS_URL,
@@ -124,10 +150,11 @@ function startVpsConnection() {
                     return;
                 }
                 if (msg.type === "relay_command" && msg.command) {
+                    console.log(`[vps] Comando recibido: ${msg.command} (esp32-relay: ${readyStateName(relaySocket)})`);
                     if (relaySocket && relaySocket.readyState === WebSocket.OPEN) {
                         relaySocket.send(msg.command);
                     } else {
-                        console.error("[vps] Comando recibido pero el ESP32 de relés no está conectado:", msg.command);
+                        console.error(`[vps] Comando ${msg.command} descartado: el ESP32 de relés no está conectado (estado: ${readyStateName(relaySocket)})`);
                     }
                 }
             },
@@ -140,6 +167,8 @@ function startVpsConnection() {
 function sendToVps(payload) {
     if (vpsSocket && vpsSocket.readyState === WebSocket.OPEN) {
         vpsSocket.send(JSON.stringify(payload));
+    } else {
+        console.warn(`[vps] No se pudo enviar (socket a la VPS en estado: ${readyStateName(vpsSocket)}):`, payload);
     }
 }
 
