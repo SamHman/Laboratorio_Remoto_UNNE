@@ -56,12 +56,15 @@ wssBridge.on("connection", (ws) => {
 // Almacenar todos los clientes conectados
 const connectedClients = new Set();
 
-relayController.setBroadcastFn((payload) => {
+function broadcastToBrowsers(payload) {
     const message = JSON.stringify(payload);
     connectedClients.forEach((client) => {
         if (client.readyState === 1) client.send(message);
     });
-});
+}
+
+relayController.setBroadcastFn(broadcastToBrowsers);
+telemetryController.setBroadcastFn(broadcastToBrowsers);
 
 // Manejar conexiones WebSocket
 wss.on('connection', (ws) => {
@@ -179,5 +182,8 @@ app.post("/api/relay/command", authorization.soloAdmin, relayController.handleCo
 
 // Ingesta de telemetría (script DTU + agente-puente), autenticada por API key
 app.post("/api/telemetry/inversor", authorization.soloApiKey, telemetryController.ingestInversor);
+// Datos instantáneos tras una maniobra de relés: no se guardan, solo se reenvían por WS
+app.get("/api/telemetry/inversor/evento-relay", authorization.soloApiKey, telemetryController.getEventoRelay);
+app.post("/api/telemetry/inversor/instantaneo", authorization.soloApiKey, telemetryController.ingestInversorInstantaneo);
 
 

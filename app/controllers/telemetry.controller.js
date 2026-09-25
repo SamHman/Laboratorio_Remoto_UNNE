@@ -1,10 +1,39 @@
 import db from "../db.js";
+import { getUltimaManiobra } from "../services/maniobras.js";
 
 const INVERSOR_FIELDS = [
     "Vpv1", "Vpv2", "Ipv1", "Ipv2",
     "Vac1", "Vac2", "Vac3", "Iac1", "Iac2", "Iac3",
     "Fac1", "Fac2", "Fac3", "Pac", "EnergyToday", "EnergyTotal", "HourTotal"
 ];
+
+let broadcastToBrowsers = () => {};
+
+function setBroadcastFn(fn) {
+    broadcastToBrowsers = fn;
+}
+
+// GoodWeReader lo consulta en cada ciclo para saber si hubo una maniobra nueva.
+function getEventoRelay(req, res) {
+    res.json({ ultima_maniobra: getUltimaManiobra() });
+}
+
+// Lectura cruda (sin promediar) que GoodWeReader manda durante la ventana
+// instantánea posterior a una maniobra. NO se guarda en la base: solo se
+// reenvía a los navegadores para que vean el efecto de la orden antes de que
+// llegue el siguiente promedio de 1 minuto.
+function ingestInversorInstantaneo(req, res) {
+    const { fecha_hora } = req.body || {};
+    if (!fecha_hora) {
+        return res.status(400).json({ status: "error", message: "fecha_hora es requerido" });
+    }
+
+    const payload = { type: "inversor_instantaneo", fecha_hora };
+    INVERSOR_FIELDS.forEach((f) => { payload[f] = req.body[f] ?? null; });
+    broadcastToBrowsers(payload);
+
+    res.json({ status: "ok" });
+}
 
 // Ingesta HTTP del script que reemplazó al bot de captura del DTU.
 // Reproduce el contrato de la vieja importar_excel_dtu.php: los mismos 17 campos
@@ -36,4 +65,4 @@ async function ingestInversor(req, res) {
     }
 }
 
-export { ingestInversor };
+export { ingestInversor, ingestInversorInstantaneo, getEventoRelay, setBroadcastFn };

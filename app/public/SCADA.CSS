@@ -240,6 +240,12 @@ header h1 {
     color: #00aaff;
 }
 
+/* Panel de datos: lectura en vivo tras una maniobra de relés (mismo color que
+   los puntos instantáneos del gráfico, ver graficos.js) */
+.data-item .value.instantaneo {
+    color: #ef4444;
+}
+
 .chart-container {
     grid-area: chart;
     background-color: var(--secondary-bg);

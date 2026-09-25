@@ -16,7 +16,8 @@ VPS compartida (Contabo, `62.171.190.54`) para exponerlo en
 queda físicamente en la LAN de la facultad — no es alcanzable desde la VPS.
 **Ya no hay ESP32 de irradiancia/temperatura**: se descartó del proyecto
 (decisión del usuario, 2026-09-25) — no reintroducir esa lógica sin que se
-pida explícitamente.
+pida explícitamente. La irradiancia/temperatura ahora llega de un Google
+Sheet (ver "Telemetría").
 
 **Entorno de desarrollo local: Windows, XAMPP, `D:\xampp\htdocs\LabVirtualUNNE`**
 (no Linux — si ves referencias a `/home/.../LabVirtualUNNE` en commits o docs
@@ -56,10 +57,16 @@ sin bundler), en `app/public/funciones/`. `SCADA.js` solo importa y llama:
 - `datos.js`, `panelDatos.js`, `graficos.js`, `modales.js`, `exportar.js`,
   `dashboard.js` — el dashboard completo (panel, gráficos con Chart.js
   `4.5.1` fijo, modal del gráfico, exportación a Excel, polling cada 30s).
+  Distingue datos **promediados** (de la base, 1 por minuto) de datos
+  **instantáneos** (en vivo tras una maniobra, nunca guardados): el panel
+  muestra "Tipo de dato" y el gráfico los dibuja como puntos rojos aparte,
+  que se retiran cuando llega el promedio de ese minuto.
 - `relay.js` — control de relés contra `POST /api/relay/command` + WS de
   `relay_status` (no WS directo al ESP32 — ver abajo). Interlocks de
   seguridad duplicados acá solo para feedback instantáneo; el servidor es la
-  fuente de verdad.
+  fuente de verdad. Es el dueño del WebSocket: los mensajes
+  `inversor_instantaneo` los reemite como evento `inversor-instantaneo` de
+  `window`, que escucha `dashboard.js`.
 
 Referencia de comportamiento viejo (sin trackear, no se sirve, **no copiar
 tal cual**): `app/public/SCADA Copia_Seguridad.js`.
@@ -98,17 +105,51 @@ Detalle completo en `NOTAS_CLUSTER.md` (sin trackear, notas del usuario).
 
 ---
 
-## Telemetría del inversor
+## Telemetría
 
-El bot Python viejo (`pyautogui` scrapeando el portal del DTU) se reemplazó
-por un script externo (no vive en este repo, **su estado actual no está
-confirmado** — puede que ni exista todavía) que debería empujar los datos por
-HTTP a `POST /api/telemetry/inversor` (`app/controllers/telemetry.controller.js`,
-función `ingestInversor`), autenticado con `INGEST_API_KEY` (header
-`X-Api-Key`). Contrato documentado en `INTEGRACION_SCRIPT_DTU.md`. Al
-2026-09-25 las tablas de la VPS están vacías (salvo filas dummy de prueba
-marcadas `origen='dummy-test'` en `datos_inversor`) — nada está empujando
-datos reales todavía. Este es el próximo tema pendiente con el usuario.
+### Inversor — GoodWeReader (fuera del repo)
+
+`goodwe_reader.py`, en la PC conectada por USB al inversor
+(`E:\ProyectoFinal\CopiaDeSeguridad\22_09_2026\Pruebas\GoodweReader`, no
+versionado acá). Lee cada 10 s y, por ventanas de reloj de
+`AVERAGE_WINDOW_SECONDS = 60`, promedia cada campo sobre las lecturas que
+realmente llegaron; ese promedio va al CSV mensual local (sin `raw_hex`) y a
+`POST /api/telemetry/inversor` (`ingestInversor`, upsert por `fecha_hora`,
+header `X-Api-Key` = `INGEST_API_KEY`, leída de `ingest_api_key.txt` al lado
+del script). No tocar `FIELDS`/`decode_response` (calibración validada) ni
+el chequeo `is_valid_response` (sumarle condiciones puede disparar
+re-handshakes, y el inversor a veces no contesta el handshake aunque siga
+mandando datos bien). Se arranca/detiene con `iniciar_lectura_inversor.bat` /
+`detener_lectura_inversor.bat` (corren el `.py` con el Python del sistema; el
+`.exe` de `dist/` está desactualizado).
+
+**Datos instantáneos** (al maniobrar un relé): `relay.controller.js` llama a
+`registrarManiobra()` (`app/services/maniobras.js`, marca en memoria). En cada
+ciclo GoodWeReader consulta `GET /api/telemetry/inversor/evento-relay`; si la
+marca cambió, durante `INSTANT_WINDOW_SECONDS = 30` manda cada lectura también
+a `POST /api/telemetry/inversor/instantaneo`, que **no guarda nada**: solo la
+reenvía por WS a los navegadores. Esas lecturas siguen contando para el
+promedio del minuto. El Excel nunca lleva instantáneos.
+
+### Irradiancia — Google Sheet
+
+`app/services/irradianciaSync.js` corre dentro de `node`: cada
+`IRRADIANCIA_POLL_INTERVAL_MS` lee el Sheet "DataLogger ESP32 - UNNE"
+(columna A fecha, B irradiancia, C temperatura; sin encabezado; mezcla
+formatos `YYYY-MM-DD` y `DD/MM/YYYY`) con una cuenta de servicio de solo
+lectura y hace upsert de todo el rango en `datos_irradiancia`. Credencial en
+`credentials/` (gitignorado, montado como volumen; copiarlo a mano a cada
+máquina). En `datos_irradiancia` de la VPS hay 20 filas dummy previas
+(2026-09-24 13:00–13:19) que no vienen del Sheet — sin decidir si se borran.
+
+### Exportación a Excel
+
+`exportar_datos_dashboard.php` (el anterior quedó como referencia en
+`Modelo_exportar_datos_dashboard.php`, sin trackear): sin promediar, una fila
+por lectura de `datos_irradiancia`, con el registro de `datos_inversor` más
+cercano dentro de ±60 s (si no hay, celdas vacías). Si el rango no tiene
+lecturas entrega las más cercanas antes/después (`datos_dashboard_cercanos_...`)
+— **es intencional, no es un bug** (decisión del usuario).
 
 **Endpoints legacy sin uso, en `app/controllers/data.controller.js`**
 (`insertInversorData`, `insertIrradianciaData`, `saveSensorData`): ningún
@@ -190,11 +231,6 @@ repetir los pasos de arriba.
   puede registrarse.
 - `app/pages/admin/informacion.html` y `app/public/informacion.js` siguen
   vacíos (pantalla planificada, nunca construida — ver `ANALISIS_PROYECTO.md`).
-- Cómo cargar datos reales del inversor a la VPS (el script del DTU) —
-  próximo tema a resolver con el usuario.
 - Limpiar los 3 endpoints legacy de `data.controller.js` (ver arriba).
-- Bug conocido en `exportar_datos_dashboard.php`: si el rango pedido no tiene
-  datos pero la tabla sí tiene en otras fechas, devuelve un Excel con los
-  registros más cercanos en vez de avisar "sin datos".
 - Zona horaria: MySQL de la VPS corre en UTC: sin `--default-time-zone=-03:00`,
   las columnas `fecha_importacion`/`creado_en` quedan 3h adelantadas.

@@ -160,7 +160,12 @@ function conectarWebSocket() {
         } catch (e) {
             return;
         }
-        if (msg.type === 'relay_status') aplicarEstado(msg);
+        if (msg.type === 'relay_status') {
+            aplicarEstado(msg);
+        } else if (msg.type === 'inversor_instantaneo') {
+            // Este módulo es dueño del WebSocket; el dashboard escucha el evento
+            window.dispatchEvent(new CustomEvent('inversor-instantaneo', { detail: msg }));
+        }
     };
 
     socket.onclose = () => {

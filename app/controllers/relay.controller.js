@@ -1,4 +1,5 @@
 import db from "../db.js";
+import { registrarManiobra } from "../services/maniobras.js";
 
 // Estado en memoria de los 3 relés, alimentado por lo que reporta el agente-puente
 // (que a su vez lo recibe del ESP32). Arranca en 'on' porque los relés están
@@ -161,6 +162,7 @@ async function handleCommand(req, res) {
         return res.status(500).json({ status: "error", message: "Error al enviar el comando al agente-puente" });
     }
 
+    registrarManiobra();
     await registrarHistorial(num, action === "relay_on" ? "encendido" : "apagado");
 
     if (num === 3 && action === "relay_on" && !wasRelay3On) {

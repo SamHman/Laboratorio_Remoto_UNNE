@@ -1,6 +1,7 @@
 // Panel lateral con los valores del inversor y del sensor
 
 const PANEL_CONFIG = [
+    { key: 'tipo_dato', label: 'Tipo de dato', isTexto: true },
     { key: 'fecha_hora_panel', label: 'Fecha y Hora Inversor', isFecha: true },
     { key: 'Vpv1', label: 'Vpv1 (V)' },
     { key: 'Vpv2', label: 'Vpv2 (V)' },
@@ -57,18 +58,23 @@ export function crearPanel(dataPanel) {
     });
 }
 
+// registro.instantaneo = lectura en vivo tras una maniobra de relés (no guardada);
+// si no, es el promedio de 1 minuto que está en la base.
 export function updateDataPanel(registro) {
     const valores = {
         ...registro,
+        tipo_dato: registro.instantaneo ? 'Instantáneo (en vivo)' : 'Promediado (1 min)',
         fecha_hora_panel: formatearFecha(registro.fecha_hora),
         fecha_hora_sensor: formatearFecha(registro.fecha_hora_sensor_raw)
     };
+
+    document.getElementById('experimento-tipo_dato')?.classList.toggle('instantaneo', !!registro.instantaneo);
 
     PANEL_CONFIG.forEach(config => {
         const element = document.getElementById(`experimento-${config.key}`);
         if (!element) return;
 
-        if (config.isFecha) {
+        if (config.isFecha || config.isTexto) {
             element.textContent = valores[config.key];
         } else {
             const numero = parseFloat(valores[config.key]);

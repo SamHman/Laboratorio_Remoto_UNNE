@@ -8,6 +8,9 @@ let mainChart = null;
 let modalChart = null;
 let datosGraficados = [];
 
+const COLOR_INSTANTANEO = '#ef4444'; // mismo que .value.instantaneo en SCADA.CSS
+const DATASET_INSTANTANEO = 2;
+
 function numeroONull(valor) {
     const numero = parseFloat(valor);
     return isNaN(numero) ? null : numero;
@@ -25,7 +28,8 @@ function createChartConfig(onClick) {
                 backgroundColor: 'rgba(245, 158, 11, 0.1)',
                 borderWidth: 2,
                 tension: 0.4,
-                fill: true
+                fill: true,
+                spanGaps: true // los huecos son las posiciones de los puntos instantáneos
             }, {
                 label: 'Irradiancia (W/m²)',
                 data: [],
@@ -34,7 +38,16 @@ function createChartConfig(onClick) {
                 borderWidth: 2,
                 tension: 0.4,
                 fill: true,
+                spanGaps: true,
                 yAxisID: 'y1'
+            }, {
+                label: 'Potencia AC instantánea (W)',
+                data: [],
+                borderColor: COLOR_INSTANTANEO,
+                backgroundColor: COLOR_INSTANTANEO,
+                showLine: false,
+                pointRadius: 5,
+                pointHoverRadius: 7
             }]
         },
         options: {
@@ -62,7 +75,14 @@ function createChartConfig(onClick) {
                 }
             },
             plugins: {
-                legend: { labels: { color: '#e0e0e0' } }
+                legend: {
+                    labels: {
+                        color: '#e0e0e0',
+                        // La serie instantánea solo figura mientras tiene puntos
+                        filter: (item, data) => item.datasetIndex !== DATASET_INSTANTANEO
+                            || data.datasets[DATASET_INSTANTANEO].data.some(v => v !== null)
+                    }
+                }
             }
         }
     };
@@ -80,17 +100,22 @@ export function initGraficos(onPointClick) {
     modalChart = new Chart(document.getElementById('modalChart'), createChartConfig(onClick));
 }
 
-export function updateCharts(datos) {
-    datosGraficados = datos;
-    const labels = datos.map(r => r.fecha_hora_formatted);
-    const pac = datos.map(r => numeroONull(r.Pac));
-    const irradiancia = datos.map(r => numeroONull(r.irradiancia));
+// datos = promedios de la base; instantaneos = lecturas en vivo tras una maniobra.
+// Se intercalan por hora en un solo eje: cada serie deja null donde el punto es de la otra.
+export function updateCharts(datos, instantaneos = []) {
+    const serie = [...datos, ...instantaneos].sort((a, b) => a.fecha_hora.localeCompare(b.fecha_hora));
+    datosGraficados = serie;
+    const labels = serie.map(r => r.fecha_hora_formatted);
+    const pac = serie.map(r => r.instantaneo ? null : numeroONull(r.Pac));
+    const irradiancia = serie.map(r => r.instantaneo ? null : numeroONull(r.irradiancia));
+    const pacInstantaneo = serie.map(r => r.instantaneo ? numeroONull(r.Pac) : null);
 
     // Cada gráfico con sus propias copias: Chart.js engancha listeners a los arrays de datos
     [mainChart, modalChart].forEach(chart => {
         chart.data.labels = [...labels];
         chart.data.datasets[0].data = [...pac];
         chart.data.datasets[1].data = [...irradiancia];
+        chart.data.datasets[DATASET_INSTANTANEO].data = [...pacInstantaneo];
         chart.update();
     });
 }
