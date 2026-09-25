@@ -75,6 +75,34 @@ tal cual**): `app/public/SCADA Copia_Seguridad.js`.
 `AllowOverride None` en el Apache de Docker hace que ni el `.htaccess` del
 proyecto se aplique ahí). Estilos nuevos van en `SCADA.CSS`.
 
+### Header, apilamiento (z-index) y `<main>` — cuidado si tocás esto
+
+- `header` tiene `z-index:100`, por encima de `.dashboard-container`
+  (`z-index:1`) — son hermanos con su propio contexto de apilamiento, y en
+  un empate gana el que viene después en el DOM (`main`), por eso el
+  header necesita un z-index más alto a propósito, no un empate.
+- **`<main>` tiene que quedar cerrado explícitamente** (`</main>` antes de
+  los `<div class="modal">`). Antes le faltaba el cierre y los modales
+  quedaban como descendientes de `main` sin que se notara (el empate de
+  z-index de arriba hacía que `main`, viniendo después, los pintara igual
+  arriba del header). Al ponerle `z-index:100` al header ese empate se
+  rompió y los modales empezaron a aparecer tapados por el header en vez
+  de cubrir toda la pantalla — si reordenás el HTML, verificá que los
+  `.modal` sigan siendo hermanos de `header`/`main`, no descendientes.
+- Menú de usuario: `header h1` centrado con grid de 3 columnas
+  (`1fr auto 1fr`), no con flex (así el ancho del username no lo corre).
+  El logout es un desplegable (`funciones/session.js: initUserMenu()`,
+  toggle por clic, cierra con clic afuera o Escape) en vez de un ícono
+  suelto.
+- Diagrama SCADA: se diseñó a mano en un lienzo fijo de 900x600
+  (posiciones absolutas en píxeles). En vez de un segundo juego de
+  coordenadas en `vw` por breakpoint (se desalineaba, no guardaba
+  proporciones), `.scada-scale-wrapper` escala el lienzo completo con
+  `transform:scale(calc(100cqw / 900px))` — el factor de escala lo calcula
+  el propio CSS con *container query units*, sin escalones. Requiere
+  navegadores 2022+ (Chrome 105+/Safari 16+/Firefox 110+). Los botones
+  siguen siendo clickeables (transform no cambia el DOM).
+
 ---
 
 ## Arquitectura de control de relés
