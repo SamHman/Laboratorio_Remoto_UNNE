@@ -60,7 +60,7 @@ function updateInverterState() {
         block.classList.add('on');
         img.classList.add('on');
     } else {
-        img.src = 'images/Inverter_Fault.png';
+        img.src = 'images/Inverter_FAULT.png';
         status.textContent = 'FAULT';
         block.classList.add('fault');
         img.classList.add('fault');

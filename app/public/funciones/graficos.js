@@ -9,6 +9,7 @@ let modalChart = null;
 let datosGraficados = [];
 
 const COLOR_INSTANTANEO = '#ef4444'; // mismo que .value.instantaneo en SCADA.CSS
+const SOMBRA_INSTANTANEO = 'rgba(239, 68, 68, 0.1)'; // misma opacidad que las otras dos series
 const DATASET_INSTANTANEO = 2;
 
 function numeroONull(valor) {
@@ -44,10 +45,12 @@ function createChartConfig(onClick) {
                 label: 'Potencia AC instantánea (W)',
                 data: [],
                 borderColor: COLOR_INSTANTANEO,
-                backgroundColor: COLOR_INSTANTANEO,
+                backgroundColor: SOMBRA_INSTANTANEO,
+                pointBackgroundColor: COLOR_INSTANTANEO,
                 showLine: false,
                 pointRadius: 5,
-                pointHoverRadius: 7
+                pointHoverRadius: 7,
+                fill: true
             }]
         },
         options: {
