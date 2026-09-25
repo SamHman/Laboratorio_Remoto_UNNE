@@ -54,6 +54,11 @@ async function insertIrradianciaData(req, res) {
 
 
 
+// ⚠️ ADVERTENCIA (2026-09-25): esta ruta (POST /api/save-sensor-data) no tiene NINGÚN
+// middleware de autorización en index.js — ni JWT ni API key. Cualquiera puede postear
+// datos falsos a datos_irradiancia. Además, nada la llama hoy (bridge-agent manda por
+// WS, no HTTP). Candidata a borrar junto con insertInversorData/insertIrradianciaData
+// de este archivo, que tampoco tienen consumidor — pendiente para la próxima conversación.
 // Función para guardar datos de sensores
 async function saveSensorData(req, res) {
     try {

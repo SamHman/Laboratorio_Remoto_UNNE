@@ -36,30 +36,4 @@ async function ingestInversor(req, res) {
     }
 }
 
-async function upsertIrradiancia(temperatura, irradiancia, fecha_hora) {
-    const fh = fecha_hora || new Date().toISOString().slice(0, 19).replace("T", " ");
-    await db.query(
-        `INSERT INTO datos_irradiancia (fecha_hora, temperatura, irradiancia)
-         VALUES (?, ?, ?)
-         ON DUPLICATE KEY UPDATE temperatura = VALUES(temperatura), irradiancia = VALUES(irradiancia), fecha_importacion = NOW()`,
-        [fh, temperatura, irradiancia]
-    );
-}
-
-// Ingesta HTTP equivalente para las lecturas de irradiancia/temperatura que reenvía
-// el agente-puente desde el ESP32 sensor (reemplaza a sensor_websocket_service.php).
-async function ingestIrradiancia(req, res) {
-    try {
-        const { temperatura, irradiancia, fecha_hora } = req.body || {};
-        if (temperatura === undefined || irradiancia === undefined) {
-            return res.status(400).json({ status: "error", message: "temperatura e irradiancia son requeridos" });
-        }
-        await upsertIrradiancia(parseFloat(temperatura), parseFloat(irradiancia), fecha_hora);
-        res.json({ status: "ok", message: "Datos de irradiancia ingresados correctamente" });
-    } catch (error) {
-        console.error("[telemetry.controller] Error en ingestIrradiancia:", error);
-        res.status(500).json({ status: "error", message: "Error al ingresar datos de irradiancia" });
-    }
-}
-
-export { ingestInversor, ingestIrradiancia, upsertIrradiancia };
+export { ingestInversor };

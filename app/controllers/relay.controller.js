@@ -1,5 +1,4 @@
 import db from "../db.js";
-import { upsertIrradiancia } from "./telemetry.controller.js";
 
 // Estado en memoria de los 3 relés, alimentado por lo que reporta el agente-puente
 // (que a su vez lo recibe del ESP32). Arranca en 'on' porque los relés están
@@ -49,7 +48,7 @@ function broadcastRelayStatus() {
     broadcastToBrowsers(getRelayStatusPayload());
 }
 
-async function handleBridgeMessage(raw) {
+function handleBridgeMessage(raw) {
     let msg;
     try {
         msg = JSON.parse(raw.toString());
@@ -60,10 +59,6 @@ async function handleBridgeMessage(raw) {
 
     if (msg.type === "relay_status") {
         updateStateFromEsp32(msg);
-    } else if (msg.type === "irradiancia") {
-        // El endpoint HTTP de ingesta hace el mismo upsert; el bridge también
-        // puede reusar este mismo canal WS en vez de un POST aparte.
-        await upsertIrradiancia(msg.temperatura, msg.irradiancia, msg.fecha_hora);
     }
 }
 

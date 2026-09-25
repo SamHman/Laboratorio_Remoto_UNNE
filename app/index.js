@@ -175,6 +175,5 @@ app.post("/api/relay/command", authorization.soloAdmin, relayController.handleCo
 
 // Ingesta de telemetría (script DTU + agente-puente), autenticada por API key
 app.post("/api/telemetry/inversor", authorization.soloApiKey, telemetryController.ingestInversor);
-app.post("/api/telemetry/irradiancia", authorization.soloApiKey, telemetryController.ingestIrradiancia);
 
 
