@@ -1,5 +1,887 @@
-/* Notificación reutilizable (funciones/notificaciones.js, showNotification).
-   Las animaciones slideIn/slideOut siguen definidas en styleSCADA.css. */
+/* Hoja de estilos de SCADA.html. Migrado de styleSCADA.css el 2026-09-25: se
+   trajo todo lo que seguía en uso, se sacó lo que no (sistema viejo de círculos
+   clickeables sobre imagen de fondo, .facena-logo, .main-content, etc. — ver
+   NOTAS_CLUSTER.md/handoff del proyecto para el detalle de la revisión) y se
+   unificaron las reglas que estaban duplicadas con valores distintos
+   (body, .modal, .modal-content, .close-button, .user-controls > i,
+   .user-info .username), dejando en cada caso el valor que efectivamente
+   se estaba aplicando (el de la última declaración, que es la que gana
+   en cascada). styleSCADA.css queda vacío y sin enlazar. */
+
+:root {
+    --primary-bg: #f5f5f5;
+    --secondary-bg: white;
+    --tertiary-bg: #fafafa;
+    --primary-text: #333;
+    --highlight-color: #f59e0b;
+    --border-color: #ddd;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    color: var(--primary-text);
+    position: relative;
+}
+
+/* Amber Glow Background */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    background-image: radial-gradient(125% 125% at 50% 90%, #ffffff 40%, #f59e0b 100%);
+    background-size: 100% 100%;
+}
+
+/* ===== Header ===== */
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background-color: var(--secondary-bg);
+    border-bottom: 2px solid var(--border-color);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+    z-index: 1;
+}
+
+header h1 {
+    font-size: 1.8rem;
+    color: var(--highlight-color);
+    text-shadow: 0 0 5px rgba(245, 158, 11, 0.3);
+    flex: 1;
+    text-align: center;
+}
+
+.logo-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-right: 20px;
+}
+
+.unne-logo {
+    height: 60px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+}
+
+/* ===== Controles de usuario / username ===== */
+
+.user-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.user-controls > i {
+    font-size: 1.5rem;
+    color: #4b5563;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.user-controls > i:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #1f2937;
+}
+
+.user-controls #logout-icon {
+    font-size: 2rem;
+    cursor: pointer;
+    transition: color 0.3s ease;
+    margin-left: 15px;
+    color: var(--primary-text);
+}
+
+.user-controls #logout-icon:hover {
+    color: var(--highlight-color);
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 6px 12px;
+    border-radius: 20px;
+    transition: all 0.3s ease;
+}
+
+.user-info .username {
+    position: relative;
+    font-weight: 500;
+    color: #1f2937;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+    background: linear-gradient(145deg, #ffffff, #f0f0f0);
+    padding: 3px 15px;
+    border-radius: 20px;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1),
+                -1px -1px 3px rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    text-align: center;
+    min-width: 80px;
+    cursor: default;
+}
+
+.user-info .username:hover {
+    transform: translateY(-1px);
+    box-shadow: 3px 3px 7px rgba(0, 0, 0, 0.12),
+                -2px -2px 4px rgba(255, 255, 255, 0.9);
+}
+
+/* Anillo degradado sutil alrededor del username */
+.user-info .username::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 18px;
+    padding: 1px;
+    background: linear-gradient(145deg, #ffffff, #e0e0e0);
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+}
+
+/* ===== Layout del dashboard ===== */
+
+.dashboard-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+        "chart data"
+        "circuit circuit";
+    gap: 20px;
+    padding: 20px;
+    min-height: calc(100vh - 80px);
+    position: relative;
+    z-index: 1;
+}
+
+.data-panel {
+    grid-area: data;
+    background-color: var(--secondary-bg);
+    border-radius: 8px;
+    padding: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    overflow-y: auto;
+    align-content: flex-start;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.data-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.data-panel::-webkit-scrollbar-track {
+    background: var(--tertiary-bg);
+    border-radius: 10px;
+}
+
+.data-panel::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 10px;
+}
+
+.data-panel::-webkit-scrollbar-thumb:hover {
+    background: var(--highlight-color);
+}
+
+.data-item {
+    background-color: var(--tertiary-bg);
+    padding: 8px;
+    border-radius: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-left: 3px solid var(--highlight-color);
+    flex-grow: 1;
+    min-width: 105px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.data-item .label {
+    font-weight: bold;
+    font-size: 0.8rem;
+    color: var(--primary-text);
+}
+
+.data-item .value {
+    font-weight: bold;
+    font-size: 1rem;
+    color: var(--highlight-color);
+}
+
+/* Panel de datos: valores que vienen del sensor de irradiancia/temperatura */
+.data-item .value.sensor {
+    color: #00aaff;
+}
+
+.chart-container {
+    grid-area: chart;
+    background-color: var(--secondary-bg);
+    padding: 20px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    transition: background-color 0.3s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.chart-container:hover {
+    background-color: var(--tertiary-bg);
+}
+
+/* Gráfico principal: Chart.js con maintainAspectRatio:false toma el alto del
+   contenedor, y .chart-container no tiene alto propio (en pantallas angostas
+   colapsaba). */
+#chart-container-main {
+    min-height: 400px;
+}
+
+/* Botones de acción en el chart-container */
+.chart-action-btn {
+    position: absolute;
+    bottom: 10px;
+    background-color: var(--highlight-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    z-index: 10;
+}
+
+.chart-action-btn:hover {
+    background-color: #d97706;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.chart-action-btn i {
+    font-size: 1.2rem;
+}
+
+.export-btn {
+    left: 10px;
+    width: auto;
+    min-width: 140px;
+}
+
+.expand-btn {
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    justify-content: center;
+    padding: 8px;
+}
+
+.circuit-placeholder {
+    grid-area: circuit;
+    background-color: var(--secondary-bg);
+    border: 2px dashed var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    height: fit-content;
+    overflow: visible;
+    position: relative;
+}
+
+/* ===== Diagrama SCADA (imágenes posicionadas + líneas SVG) ===== */
+
+.scada-container {
+    position: relative;
+    width: 900px;
+    height: 600px;
+    overflow: hidden;
+    background-color: white;
+    border: 1px solid #ddd;
+}
+
+.connections-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.connections-layer line {
+    stroke: black;
+    stroke-width: 2;
+}
+
+.component {
+    position: absolute;
+    z-index: 3;
+}
+
+#solar-panels {
+    top: 199px;
+    left: 2px;
+    width: 217px;
+    height: auto;
+}
+
+#breaker-top {
+    top: 236px;
+    left: 279px;
+    width: 80px;
+    height: auto;
+}
+
+#breaker-bottom {
+    top: 329px;
+    left: 278px;
+    width: 80px;
+    height: auto;
+}
+
+#breaker-center {
+    top: 267px;
+    left: 615px;
+    width: 80px;
+    height: auto;
+}
+
+#esp8266-top {
+    top: 128px;
+    left: 263px;
+    width: 110px;
+    height: auto;
+}
+
+#esp8266-bottom {
+    top: 410px;
+    left: 262px;
+    width: 110px;
+    height: auto;
+}
+
+#esp8266-right {
+    top: 128px;
+    left: 599px;
+    width: 110px;
+    height: auto;
+}
+
+#goodwe-inverter {
+    top: 218px;
+    left: 405px;
+    width: 191px;
+    height: auto;
+}
+
+#ac-right {
+    top: 268px;
+    left: 714px;
+    width: 85px;
+    height: auto;
+}
+
+.interactive-inverter,
+.interactive-esp8266 {
+    cursor: pointer;
+    transition: transform 0.2s ease-in-out;
+}
+
+.interactive-inverter:hover,
+.interactive-esp8266:hover {
+    transform: scale(1.05);
+}
+
+/* Oculta la imagen original si está dentro de un device-block, para evitar duplicados */
+#esp8266-top, #esp8266-bottom, #esp8266-right, #goodwe-inverter {
+    position: static;
+}
+
+/* ===== Bloques de dispositivos interactuables (relay.js) ===== */
+
+.device-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: absolute;
+    border: 2px solid transparent;
+    transition: box-shadow 0.2s, border 0.2s;
+}
+
+.device-label {
+    margin-top: 2px;
+    font-size: 0.95em;
+    font-weight: 600;
+    color: #333;
+    text-align: center;
+}
+
+.device-status-text {
+    margin-top: 1px;
+    font-size: 0.95em;
+    font-weight: bold;
+    color: #059669; /* Verde por defecto, se sobrescribe abajo/en JS */
+    text-align: center;
+    text-shadow: 0 1px 2px #fff8;
+}
+
+.device-status-text.off {
+    color: #b91c1c;
+}
+
+.device-status-text.on {
+    color: #059669;
+}
+
+.device-status-text.disconnected {
+    color: #7f1d1d;
+}
+
+/* Filtro para relay desconectado (funciones/relay.js: img.classList.toggle('relay-disconnected', ...)) */
+.relay-disconnected img,
+img.relay-disconnected {
+    filter: grayscale(0.7) brightness(0.7) sepia(1) hue-rotate(-20deg) saturate(2) drop-shadow(0 0 4px #7f1d1d);
+}
+
+/* Mostrar nombre y estado solo al hacer hover en cualquier device-block */
+.device-block .device-label,
+.device-block .device-status-text {
+    display: none;
+}
+
+.device-block:hover .device-label,
+.device-block:hover .device-status-text {
+    display: block;
+}
+
+/* Posición de los device-block, igual que las imágenes que reemplazan */
+#block-esp8266-top,
+#block-esp8266-bottom,
+#block-esp8266-right,
+#block-goodwe-inverter {
+    flex-direction: column;
+}
+
+#block-esp8266-top {
+    top: 128px;
+    left: 263px;
+    width: 110px;
+    height: auto;
+}
+
+#block-esp8266-top .device-label,
+#block-esp8266-top .device-status-text {
+    display: none;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+#block-esp8266-top:hover .device-label,
+#block-esp8266-top:hover .device-status-text {
+    display: block;
+}
+
+#block-esp8266-top .device-status-text {
+    margin-bottom: 2px;
+}
+
+#block-esp8266-bottom { top: 410px; left: 262px; width: 110px; height: auto; }
+#block-esp8266-right { top: 128px; left: 599px; width: 110px; height: auto; }
+#block-goodwe-inverter { top: 218px; left: 405px; width: 191px; height: auto; }
+
+/* Borde de color según estado al hacer hover sobre el device-block */
+.device-block:hover.on {
+    box-shadow: 0 0 0 3px #059669;
+    border: 2px solid #059669;
+}
+
+.device-block:hover.off {
+    box-shadow: 0 0 0 3px #b91c1c;
+    border: 2px solid #b91c1c;
+}
+
+.device-block:hover.disconnected {
+    box-shadow: 0 0 0 3px #7f1d1d;
+    border: 2px solid #7f1d1d;
+}
+
+/* ===== Modales ===== */
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.4);
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+/* Los modales se abren agregando .is-open (funciones/modales.js) */
+.modal.is-open {
+    display: flex;
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #888;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 400px;
+    height: 85vh;
+    box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+    animation-name: animatetop;
+    animation-duration: 0.4s;
+    position: relative;
+    text-align: center;
+}
+
+@keyframes animatetop {
+    from { top: -300px; opacity: 0; }
+    to { top: 0; opacity: 1; }
+}
+
+.close-button {
+    position: absolute;
+    top: 15px;
+    right: 25px;
+    color: #aaa;
+    font-size: 32px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 1001;
+    float: right;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: black;
+    text-decoration: none;
+}
+
+/* Modal de dispositivo (#device-modal): estilado, pero sin JS que lo abra
+   todavía (deviceModal.js pendiente) — no es CSS muerto, es CSS a la espera. */
+.device-modal-content {
+    width: 90vw;
+    max-width: 800px;
+    height: 85vh;
+    max-height: 600px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.device-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.device-header h2 {
+    color: var(--highlight-color);
+    margin: 0;
+}
+
+.device-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #10b981;
+    animation: statusPulse 2s infinite;
+}
+
+.status-indicator.disconnected {
+    background-color: #ef4444;
+}
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.status-text {
+    font-weight: bold;
+    color: var(--primary-text);
+}
+
+.device-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 20px;
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+.info-section {
+    background-color: var(--tertiary-bg);
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid var(--highlight-color);
+}
+
+.info-section h3 {
+    color: var(--highlight-color);
+    margin: 0 0 10px 0;
+    font-size: 14px;
+}
+
+.info-section p {
+    margin: 5px 0;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.info-section .value {
+    font-weight: bold;
+    color: var(--highlight-color);
+}
+
+.device-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    padding-top: 15px;
+    border-top: 2px solid var(--border-color);
+}
+
+.action-btn {
+    padding: 10px 20px;
+    background-color: var(--highlight-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.action-btn:hover {
+    background-color: #d97706;
+}
+
+.action-btn i {
+    font-size: 16px;
+}
+
+/* Modal del gráfico: la .modal-content genérica de arriba es chica y blanca
+   (pensada para el export-modal); acá se agranda y se retematiza para el gráfico. */
+#chart-modal .modal-content {
+    width: 90vw;
+    max-width: none;
+    height: 85vh;
+    background-color: var(--secondary-bg);
+    border: none;
+    border-radius: 8px;
+    padding: 25px;
+    text-align: initial;
+}
+
+.export-modal-content {
+    width: auto;
+    height: auto;
+    max-width: 500px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.export-modal-content h2 {
+    text-align: center;
+    color: var(--highlight-color);
+}
+
+.export-options {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 15px;
+    align-items: center;
+}
+
+.export-options label {
+    font-weight: bold;
+    color: var(--primary-text);
+}
+
+.export-options input {
+    background-color: var(--tertiary-bg);
+    color: var(--primary-text);
+    border: 1px solid var(--border-color);
+    padding: 8px;
+    border-radius: 4px;
+    font-family: inherit;
+}
+
+.export-options input:focus {
+    outline: none;
+    border-color: var(--highlight-color);
+    background-color: white;
+}
+
+#confirm-export-btn {
+    padding: 10px 15px;
+    background-color: var(--highlight-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+    align-self: center;
+}
+
+#confirm-export-btn:hover {
+    background-color: #d97706;
+}
+
+/* ===== Reloj digital ===== */
+
+.reloj-marco {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 15px 5px 15px;
+    background-color: rgba(43, 43, 43, 0.8);
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4),
+               inset 0 1px 3px rgba(255, 255, 255, 0.1);
+    font-family: 'Consolas', 'Courier New', monospace;
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    backdrop-filter: blur(2px);
+}
+
+#reloj-digital {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #FF0000;
+    display: flex;
+    align-items: center;
+    letter-spacing: -1px;
+    text-shadow: 0 0 10px rgba(255, 0, 0, 0.9);
+    background-color: #1a1a1a;
+    padding: 3px 8px;
+    border-radius: 5px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.6);
+}
+
+#segundo {
+    font-size: 1.5rem;
+    align-self: unset;
+    margin-left: 0;
+    opacity: 1;
+}
+
+.separador {
+    color: #FF0000;
+    margin: 0 2px;
+    animation: blinker 1s infinite step-end;
+}
+
+.segundos-separador {
+    animation: none;
+}
+
+@keyframes blinker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+#localizacion {
+    font-size: 0.7rem;
+    color: #888;
+    margin-top: 2px;
+    padding-right: 5px;
+    text-align: right;
+    width: 100%;
+}
+
+/* ===== Notificaciones (funciones/notificaciones.js) ===== */
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 .export-notif {
     position: fixed;
     top: 60px;
@@ -29,8 +911,6 @@
     animation: slideOut 0.3s ease-in;
 }
 
-/* Notificación de progreso con spinner y cuenta regresiva (mostrarProgreso).
-   La animación spin está definida en styleSCADA.css. (CARLOS: revisarla y agregarla aquí) */
 .progress-notif {
     position: fixed;
     top: 100px;
@@ -75,31 +955,391 @@
     margin-top: 4px;
 }
 
-/* Panel de datos: valores que vienen del sensor de irradiancia/temperatura */
-.data-item .value.sensor {
-    color: #00aaff;
+/* ===== Responsive ===== */
+
+@media (max-width: 1024px) {
+    .dashboard-container {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+        grid-template-areas:
+            "chart"
+            "data"
+            "circuit";
+        gap: 15px;
+        padding: 15px;
+        height: auto;
+        min-height: calc(100vh - 80px);
+    }
+
+    .chart-container {
+        min-height: 250px;
+    }
+
+    .data-panel {
+        min-height: 180px;
+    }
+
+    .circuit-placeholder {
+        height: fit-content;
+    }
+
+    #reloj-digital {
+        font-size: 1.2rem;
+    }
+
+    #localizacion {
+        font-size: 0.6rem;
+    }
 }
 
-/* Modales: se abren agregando .is-open (funciones/modales.js) */
-.modal.is-open {
-    display: flex;
+@media (max-width: 768px) {
+    header {
+        padding: 0.8rem 1rem;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .logo-container {
+        gap: 10px;
+        margin-right: 15px;
+    }
+
+    .unne-logo {
+        height: 48px;
+    }
+
+    header h1 {
+        font-size: 1.5rem;
+        order: 3;
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .user-controls {
+        display: flex;
+        gap: 10px;
+    }
+
+    .user-controls > i {
+        font-size: 1.3rem;
+    }
+
+    .user-controls #logout-icon,
+    .user-controls #export-icon {
+        font-size: 1.5rem;
+        margin-left: 0;
+    }
+
+    .user-info .username {
+        max-width: 100px;
+    }
+
+    .dashboard-container {
+        padding: 10px;
+        gap: 10px;
+    }
+
+    .chart-container {
+        padding: 15px;
+        min-height: 200px;
+    }
+
+    .data-panel {
+        padding: 12px;
+        min-height: 150px;
+    }
+
+    .data-item {
+        min-width: 90px;
+        padding: 6px;
+    }
+
+    .data-item .label {
+        font-size: 0.7rem;
+    }
+
+    .data-item .value {
+        font-size: 0.9rem;
+    }
+
+    .circuit-placeholder {
+        padding: 15px;
+        height: fit-content;
+    }
+
+    .modal-content {
+        width: 95vw;
+        height: 90vh;
+        padding: 20px;
+    }
+
+    .export-modal-content {
+        max-width: 90vw;
+    }
+
+    .export-options {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .device-modal-content {
+        width: 95vw;
+        height: 90vh;
+        gap: 15px;
+    }
+
+    .device-info-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .device-header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+
+    .device-actions {
+        flex-direction: column;
+    }
+
+    .action-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .reloj-marco {
+        padding: 5px 10px 3px 10px;
+        top: 5px;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    #reloj-digital {
+        font-size: 1rem;
+    }
+
+    #localizacion {
+        font-size: 0.5rem;
+    }
 }
 
-/* Gráfico principal: Chart.js con maintainAspectRatio:false toma el alto del contenedor,
-   y .chart-container no tiene alto propio (en pantallas angostas colapsaba). */
-#chart-container-main {
-    min-height: 400px;
+@media (max-width: 600px) {
+    .scada-container {
+        width: 98vw;
+        height: 60vw;
+        min-width: 0;
+        min-height: 0;
+        max-width: 100vw;
+        max-height: 70vw;
+    }
+    .scada-container .component {
+        width: 12vw !important;
+        min-width: 30px;
+        max-width: 80px;
+    }
+    #solar-panels { top: 33vw; left: 0.5vw; width: 24vw !important; }
+    #breaker-top { top: 39vw; left: 30vw; width: 9vw !important; }
+    #breaker-bottom { top: 54vw; left: 30vw; width: 9vw !important; }
+    #breaker-center { top: 44vw; left: 68vw; width: 9vw !important; }
+    #esp8266-top { top: 21vw; left: 28vw; width: 12vw !important; }
+    #esp8266-bottom { top: 56vw; left: 28vw; width: 12vw !important; }
+    #esp8266-right { top: 21vw; left: 66vw; width: 12vw !important; }
+    #goodwe-inverter { top: 36vw; left: 45vw; width: 20vw !important; }
+    #ac-right { top: 44vw; left: 80vw; width: 8vw !important; }
+    .connections-layer {
+        width: 100% !important;
+        height: 100% !important;
+    }
 }
 
-/* Modal del gráfico: styleSCADA.css define .modal-content dos veces y la segunda
-   (blanca, máx. 400px, sin alto) pisa a la primera y deja al canvas sin espacio. (CARLOS: revisar esa lógica) */
-#chart-modal .modal-content {
-    width: 90vw;
-    max-width: none;
-    height: 85vh;
-    background-color: var(--secondary-bg);
-    border: none;
-    border-radius: 8px;
-    padding: 25px;
-    text-align: initial;
+@media (max-width: 480px) {
+    header {
+        padding: 0.6rem 0.8rem;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .logo-container {
+        gap: 8px;
+        margin-right: 0;
+        justify-content: center;
+    }
+
+    .unne-logo {
+        height: 42px;
+    }
+
+    header h1 {
+        font-size: 1.2rem;
+        order: 2;
+        margin-top: 5px;
+    }
+
+    .user-controls {
+        order: 3;
+        gap: 15px;
+    }
+
+    .user-controls #logout-icon,
+    .user-controls #export-icon {
+        font-size: 1.3rem;
+    }
+
+    .dashboard-container {
+        padding: 8px;
+        gap: 8px;
+        grid-template-rows: auto auto auto;
+    }
+
+    .chart-container {
+        padding: 10px;
+        min-height: 150px;
+    }
+
+    .data-panel {
+        padding: 10px;
+        min-height: 120px;
+        gap: 6px;
+    }
+
+    .data-item {
+        min-width: 80px;
+        padding: 5px;
+        flex-direction: column;
+        text-align: center;
+        gap: 2px;
+    }
+
+    .data-item .label {
+        font-size: 0.65rem;
+    }
+
+    .data-item .value {
+        font-size: 0.8rem;
+    }
+
+    .circuit-placeholder {
+        padding: 10px;
+        height: fit-content;
+    }
+
+    .modal-content {
+        width: 98vw;
+        height: 95vh;
+        padding: 15px;
+    }
+
+    .export-modal-content {
+        max-width: 95vw;
+        gap: 15px;
+    }
+
+    .export-options {
+        gap: 8px;
+    }
+
+    .export-options label {
+        font-size: 0.9rem;
+    }
+
+    .export-options input {
+        padding: 6px;
+        font-size: 0.9rem;
+    }
+
+    #confirm-export-btn {
+        padding: 8px 12px;
+        font-size: 0.9rem;
+    }
+
+    .close-button {
+        top: 10px;
+        right: 15px;
+        font-size: 28px;
+    }
+}
+
+@media (max-width: 360px) {
+    header {
+        padding: 0.5rem 0.6rem;
+    }
+
+    .unne-logo {
+        height: 36px;
+    }
+
+    header h1 {
+        font-size: 1rem;
+    }
+
+    .user-controls #logout-icon,
+    .user-controls #export-icon {
+        font-size: 1.2rem;
+    }
+
+    .dashboard-container {
+        padding: 5px;
+        gap: 5px;
+    }
+
+    .chart-container {
+        padding: 8px;
+        min-height: 120px;
+    }
+
+    .data-panel {
+        padding: 8px;
+        min-height: 100px;
+    }
+
+    .data-item {
+        min-width: 70px;
+        padding: 4px;
+    }
+
+    .data-item .label {
+        font-size: 0.6rem;
+    }
+
+    .data-item .value {
+        font-size: 0.75rem;
+    }
+
+    .circuit-placeholder {
+        padding: 8px;
+        height: fit-content;
+    }
+}
+
+@media (max-width: 768px) and (orientation: landscape) {
+    header {
+        flex-direction: row;
+        flex-wrap: nowrap;
+    }
+
+    header h1 {
+        order: 2;
+        width: auto;
+        margin-top: 0;
+    }
+
+    .dashboard-container {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr;
+        grid-template-areas: "chart data";
+        gap: 10px;
+    }
+
+    .circuit-placeholder {
+        display: none;
+    }
+
+    .chart-container {
+        min-height: 180px;
+    }
+
+    .data-panel {
+        min-height: 180px;
+    }
 }
