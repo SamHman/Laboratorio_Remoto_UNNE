@@ -10,6 +10,32 @@ export function initLogout() {
     }
 }
 
+// Menú de usuario: el botón (username) abre/cierra el desplegable con el logout
+export function initUserMenu() {
+    const menu = document.getElementById('user-menu');
+    const trigger = document.getElementById('user-menu-trigger');
+    if (!menu || !trigger) return;
+
+    const cerrar = () => {
+        menu.classList.remove('is-open');
+        trigger.setAttribute('aria-expanded', 'false');
+    };
+
+    trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const abierto = menu.classList.toggle('is-open');
+        trigger.setAttribute('aria-expanded', String(abierto));
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!menu.contains(e.target)) cerrar();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') cerrar();
+    });
+}
+
 export async function initWhoami() {
     try {
         const response = await fetch('/api/whoami');

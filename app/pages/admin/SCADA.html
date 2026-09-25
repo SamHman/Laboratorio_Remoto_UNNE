@@ -16,10 +16,19 @@
         </div>
         <h1>Laboratorio Remoto</h1>
         <div class="user-controls">
-            <div class="user-info">
-                <span id="header-username" class="username">Cargando...</span>
+            <div class="user-menu" id="user-menu">
+                <button class="user-menu-trigger" id="user-menu-trigger" aria-haspopup="true" aria-expanded="false">
+                    <span class="user-info">
+                        <span id="header-username" class="username">Cargando...</span>
+                    </span>
+                    <i class='bx bx-chevron-down user-menu-caret'></i>
+                </button>
+                <div class="user-menu-dropdown" id="user-menu-dropdown">
+                    <button class="user-menu-item" id="logout-icon" title="Cerrar sesión">
+                        <i class='bx bx-log-out'></i> Cerrar sesión
+                    </button>
+                </div>
             </div>
-            <i class='bx bx-log-out' id="logout-icon" title="Cerrar sesión"></i>
         </div>
     </header>
 

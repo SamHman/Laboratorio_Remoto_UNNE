@@ -1,4 +1,4 @@
-import { initLogout, initWhoami } from './funciones/session.js';
+import { initLogout, initWhoami, initUserMenu } from './funciones/session.js';
 import { initReloj } from './funciones/reloj.js';
 import { initDashboard } from './funciones/dashboard.js';
 import { initRelayControl } from './funciones/relay.js';
@@ -14,6 +14,7 @@ let userData = {
 
 initLogout();
 initWhoami();
+initUserMenu();
 initReloj();
 
 //////// Logica de dashboard ///////
