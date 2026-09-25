@@ -12,6 +12,8 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./sql/init:/docker-entrypoint-initdb.d:ro,z
+    ports:
+      - "127.0.0.1:3306:3306" # solo loopback de la VPS, no expuesto a internet - para conectar con un cliente SQL vía túnel SSH
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 5s
