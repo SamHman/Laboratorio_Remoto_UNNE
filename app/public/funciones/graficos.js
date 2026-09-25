@@ -3,6 +3,7 @@
 // actualizado igual que el principal; al abrir el modal solo se redimensiona.
 
 import { abrirModal } from './modales.js';
+import { STALE_DATA_MS } from './config.js';
 
 let mainChart = null;
 let modalChart = null;
@@ -15,6 +16,30 @@ const DATASET_INSTANTANEO = 2;
 function numeroONull(valor) {
     const numero = parseFloat(valor);
     return isNaN(numero) ? null : numero;
+}
+
+function toTimestamp(fechaHora) {
+    return new Date(fechaHora.replace(' ', 'T')).getTime();
+}
+
+// Si el último punto real (el que manda el reloj es el del inversor, que es el que arma el
+// eje) ya tiene más de STALE_DATA_MS, el inversor mismo dejó de mandar datos nuevos: en vez de
+// dejar la curva "colgada" en el último valor real como si siguiera vigente, se agrega un punto
+// sintético en el momento actual con Pac/irradiancia en 0. synthetic:true lo excluye del click.
+function agregarPuntoStaleSiCorresponde(serie) {
+    const ultimo = serie[serie.length - 1];
+    if (!ultimo || (Date.now() - toTimestamp(ultimo.fecha_hora)) <= STALE_DATA_MS) return;
+
+    const ahora = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    serie.push({
+        fecha_hora: `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`,
+        fecha_hora_formatted: `${pad(ahora.getHours())}:${pad(ahora.getMinutes())}:${pad(ahora.getSeconds())}`,
+        Pac: 0,
+        irradiancia: 0,
+        instantaneo: false,
+        synthetic: true
+    });
 }
 
 function createChartConfig(onClick) {
@@ -96,7 +121,7 @@ export function initGraficos(onPointClick) {
     const onClick = (event, elements) => {
         if (elements.length === 0) return;
         const registro = datosGraficados[elements[0].index];
-        if (registro) onPointClick(registro);
+        if (registro && !registro.synthetic) onPointClick(registro);
     };
 
     mainChart = new Chart(document.getElementById('realTimeChart'), createChartConfig(onClick));
@@ -107,10 +132,11 @@ export function initGraficos(onPointClick) {
 // Se intercalan por hora en un solo eje: cada serie deja null donde el punto es de la otra.
 export function updateCharts(datos, instantaneos = []) {
     const serie = [...datos, ...instantaneos].sort((a, b) => a.fecha_hora.localeCompare(b.fecha_hora));
+    agregarPuntoStaleSiCorresponde(serie);
     datosGraficados = serie;
     const labels = serie.map(r => r.fecha_hora_formatted);
     const pac = serie.map(r => r.instantaneo ? null : numeroONull(r.Pac));
-    const irradiancia = serie.map(r => r.instantaneo ? null : numeroONull(r.irradiancia));
+    const irradiancia = serie.map(r => r.instantaneo ? null : numeroONull(r.irradiancia_stale ? 0 : r.irradiancia));
     const pacInstantaneo = serie.map(r => r.instantaneo ? numeroONull(r.Pac) : null);
 
     // Cada gráfico con sus propias copias: Chart.js engancha listeners a los arrays de datos
