@@ -180,20 +180,20 @@ header h1 {
     transition: all 0.3s ease;
 }
 
+/* Misma estética que .user-menu-dropdown (blanco, esquinas de 10px), con
+   marco dorado a juego con el resto de la página en vez del óvalo gris. */
 .user-info .username {
-    position: relative;
     font-weight: 500;
     color: #1f2937;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 150px;
-    background: linear-gradient(145deg, #ffffff, #f0f0f0);
-    padding: 3px 15px;
-    border-radius: 20px;
-    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1),
-                -1px -1px 3px rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(0, 0, 0, 0.05);
+    background-color: var(--secondary-bg);
+    padding: 6px 16px;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+    border: 1.5px solid var(--highlight-color);
     transition: all 0.3s ease;
     text-align: center;
     min-width: 80px;
@@ -202,30 +202,7 @@ header h1 {
 
 .user-info .username:hover {
     transform: translateY(-1px);
-    box-shadow: 3px 3px 7px rgba(0, 0, 0, 0.12),
-                -2px -2px 4px rgba(255, 255, 255, 0.9);
-}
-
-/* Anillo degradado sutil alrededor del username */
-.user-info .username::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-radius: 18px;
-    padding: 1px;
-    background: linear-gradient(145deg, #ffffff, #e0e0e0);
-    -webkit-mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-    mask-composite: exclude;
-    pointer-events: none;
+    box-shadow: 0 6px 14px rgba(245, 158, 11, 0.3);
 }
 
 /* ===== Layout del dashboard ===== */
