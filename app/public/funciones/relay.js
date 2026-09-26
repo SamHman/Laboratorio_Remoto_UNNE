@@ -1,6 +1,6 @@
 
 
-import { showNotification, mostrarProgreso } from './notificaciones.js';
+import { showNotification } from './notificaciones.js';
 
 const RELAY_ELEMENTS = {
     1: 'esp8266-top',
@@ -9,14 +9,22 @@ const RELAY_ELEMENTS = {
 };
 
 const BUTTON_COOLDOWN_MS = 5000;
-const FAULT_DELAY_S = 320; // igual a FAULT_DELAY_MS en relay.controller.js
 
 let relayStates = { 1: 'on', 2: 'on', 3: 'on' };
 let espConnected = false;
 const buttonCooldowns = {};
-let cerrarBannerFault = null;
-let faultWindowActive = false; // true mientras dura el banner de espera de reconexión
 let socket = null;
+
+// Momento (epoch ms) en que termina la ventana de bloqueo por Fault, o null si no
+// hay ninguna en curso. Viene del servidor (relay_status.faultWindowEndsAt) en vez
+// de detectarse localmente por la transición off->on: así, si la página se recarga
+// o el WS se reconecta a mitad de la espera, el primer relay_status que llega ya
+// trae el dato real y el bloqueo se reconstruye - antes este estado vivía solo en
+// memoria del navegador y un refresh lo hacía desaparecer sin que la ventana real
+// hubiera terminado, dando a entender que todo estaba normal cuando no era así.
+let faultWindowEndsAt = null;
+let faultBannerEl = null;
+let faultBannerDescartado = false; // el usuario cerró el cartel a mano para ESTA ventana
 
 function updateRelayVisual(elementId, state) {
     const block = document.getElementById('block-' + elementId);
@@ -43,9 +51,9 @@ function updateRelayVisual(elementId, state) {
 }
 
 // El inversor no tiene comando propio: su ícono se deriva del estado de Relay 3,
-// salvo mientras dura la ventana de espera de reconexión tras encender Relay 3
-// (faultWindowActive, ver manejarBannerFault) - ahí se fuerza FAULT aunque el
-// relé ya esté "on", para que el ícono acompañe al banner de esos ~320s.
+// salvo mientras dura la ventana de bloqueo por Fault tras encender Relay 3
+// (faultWindowEndsAt en el futuro) - ahí se fuerza FAULT aunque el relé ya esté
+// "on", para que el ícono acompañe al cartel de esos ~320s.
 // (El código viejo tenía un tercer caso "OFF" para cuando R1/R2/R3 están todos
 // apagados, pero nunca se ejecutaba: el primer "if" ya cubre cualquier R3 apagado.)
 function updateInverterState() {
@@ -54,7 +62,8 @@ function updateInverterState() {
     const block = document.getElementById('block-goodwe-inverter');
     if (!img || !status || !block) return;
 
-    const relay3On = relayStates[3] === 'on' && !faultWindowActive;
+    const enVentanaFault = !!faultWindowEndsAt && faultWindowEndsAt > Date.now();
+    const relay3On = relayStates[3] === 'on' && !enVentanaFault;
     block.classList.remove('on', 'fault');
     img.classList.remove('on', 'fault');
 
@@ -122,30 +131,69 @@ function checkInterlocks(relayNum, action) {
     return { ok: true };
 }
 
-// --- Banner de espera de reconexión del inversor (Relay 3 ON) ---
+// --- Cartel de bloqueo por Fault (Relay 3 ON, ventana de faultWindowEndsAt) ---
+// A diferencia del resto de las notificaciones (notificaciones.js), este cartel no
+// arranca su propio cronómetro: se reconstruye cada segundo a partir de
+// faultWindowEndsAt (dato del servidor), así que sobrevive a un refresh de la
+// página o a una reconexión del WS sin perder la cuenta real.
 
-function manejarBannerFault(wasOn, isOn) {
-    if (!wasOn && isOn) {
-        if (cerrarBannerFault) cerrarBannerFault();
-        faultWindowActive = true;
-        updateInverterState();
-        cerrarBannerFault = mostrarProgreso('Inversor en modo Fault esperando reconexión...', FAULT_DELAY_S, () => {
-            faultWindowActive = false;
-            cerrarBannerFault = null;
-            updateInverterState();
-        });
-    } else if (wasOn && !isOn && cerrarBannerFault) {
-        const cerrar = cerrarBannerFault;
-        cerrarBannerFault = null;
-        cerrar(); // dispara el mismo callback de arriba: faultWindowActive=false + updateInverterState()
+function ocultarBannerFault() {
+    if (!faultBannerEl) return;
+    const el = faultBannerEl;
+    faultBannerEl = null;
+    el.classList.add('notif-out');
+    setTimeout(() => el.remove(), 300);
+}
+
+function crearBannerFault() {
+    const notif = document.createElement('div');
+    notif.className = 'progress-notif';
+    notif.innerHTML = `
+        <button type="button" class="progress-notif-close" aria-label="Cerrar">&times;</button>
+        <div class="progress-notif-body">
+            <div class="notif-spinner"></div>
+            <div class="progress-notif-title"></div>
+        </div>
+    `;
+    notif.querySelector('.progress-notif-close').addEventListener('click', () => {
+        // Solo oculta el cartel de la pantalla (para que no estorbe, sobre todo en
+        // celular): la ventana de Fault real sigue corriendo en el servidor, esto
+        // no la cancela ni destraba el ícono antes de tiempo.
+        faultBannerDescartado = true;
+        ocultarBannerFault();
+    });
+    document.body.appendChild(notif);
+    return notif;
+}
+
+// Se llama cada vez que llega un relay_status (incluido el primero tras conectar)
+// y también una vez por segundo, para que la cuenta regresiva se vea fluida sin
+// depender de la frecuencia de mensajes del WS.
+function actualizarBannerFault() {
+    const activo = !!faultWindowEndsAt && faultWindowEndsAt > Date.now();
+    if (!activo) {
+        ocultarBannerFault();
+        return;
     }
+    if (faultBannerDescartado) return;
+    if (!faultBannerEl) faultBannerEl = crearBannerFault();
+    const restante = Math.max(0, Math.ceil((faultWindowEndsAt - Date.now()) / 1000));
+    faultBannerEl.querySelector('.progress-notif-title').textContent =
+        `Bloqueado: el inversor entró en modo FAULT, quedan ${restante} segundos`;
+}
+
+function sincronizarFaultWindow(nuevoFaultWindowEndsAt) {
+    const eraActivo = !!faultWindowEndsAt && faultWindowEndsAt > Date.now();
+    faultWindowEndsAt = nuevoFaultWindowEndsAt || null;
+    const esActivo = !!faultWindowEndsAt && faultWindowEndsAt > Date.now();
+    if (esActivo && !eraActivo) faultBannerDescartado = false; // ventana nueva: si habías cerrado el cartel de la anterior, esta es otra
+    updateInverterState();
+    actualizarBannerFault();
 }
 
 // --- Estado recibido del servidor (WS, mensajes 'relay_status') ---
 
 function aplicarEstado(msg) {
-    const relay3Antes = relayStates[3] === 'on';
-
     if (msg.relay1 !== undefined) relayStates[1] = msg.relay1;
     if (msg.relay2 !== undefined) relayStates[2] = msg.relay2;
     if (msg.relay3 !== undefined) relayStates[3] = msg.relay3;
@@ -154,10 +202,8 @@ function aplicarEstado(msg) {
     Object.entries(RELAY_ELEMENTS).forEach(([num, elementId]) => {
         updateRelayVisual(elementId, espConnected ? relayStates[num] : 'disconnected');
     });
-    updateInverterState();
+    sincronizarFaultWindow(msg.faultWindowEndsAt);
     refreshAllButtons();
-
-    manejarBannerFault(relay3Antes, relayStates[3] === 'on');
 }
 
 function conectarWebSocket() {
@@ -244,4 +290,5 @@ export function initRelayControl() {
     });
     updateInverterState();
     conectarWebSocket();
+    setInterval(actualizarBannerFault, 1000); // cuenta regresiva fluida entre mensajes del WS
 }

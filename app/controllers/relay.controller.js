@@ -15,6 +15,13 @@ let esp32Connected = false;
 let broadcastToBrowsers = () => {};
 let faultTimer = null;
 const FAULT_DELAY_MS = 320 * 1000;
+// Momento (Date.now() + FAULT_DELAY_MS) en que termina la ventana de espera de
+// reconexión, o null si no hay ninguna en curso. Va en el payload de relay_status
+// para que el frontend pueda reconstruir el bloqueo y el cartel de cuenta regresiva
+// aunque recién se haya conectado (recarga de página, reconexión de WS) - antes ese
+// estado vivía solo en memoria del navegador y un refresh lo hacía desaparecer sin
+// que la ventana real (server-side) hubiera terminado.
+let faultWindowEndsAt = null;
 
 function setBroadcastFn(fn) {
     broadcastToBrowsers = fn;
@@ -50,7 +57,8 @@ function getRelayStatusPayload() {
         relay1: relayStates[1],
         relay2: relayStates[2],
         relay3: relayStates[3],
-        espConnected: isBridgeConnected() && esp32Connected
+        espConnected: isBridgeConnected() && esp32Connected,
+        faultWindowEndsAt
     };
 }
 
@@ -85,6 +93,7 @@ function updateStateFromEsp32(msg) {
     if (prev3 === "on" && relayStates[3] === "off" && faultTimer) {
         clearTimeout(faultTimer);
         faultTimer = null;
+        faultWindowEndsAt = null;
     }
 
     broadcastRelayStatus();
@@ -137,12 +146,15 @@ async function registrarHistorial(relayNum, accion, faultDetectado = false) {
 
 function scheduleFaultCheck(relayNum) {
     if (faultTimer) clearTimeout(faultTimer);
+    faultWindowEndsAt = Date.now() + FAULT_DELAY_MS;
     faultTimer = setTimeout(async () => {
         faultTimer = null;
+        faultWindowEndsAt = null;
         if (relayStates[3] === "on") {
             console.log("[relay.controller] Fault detectado tras 320s con Relay 3 sostenido en ON");
             await registrarHistorial(relayNum, "encendido", true);
         }
+        broadcastRelayStatus(); // avisa a los navegadores que la ventana de bloqueo terminó
     }, FAULT_DELAY_MS);
 }
 
