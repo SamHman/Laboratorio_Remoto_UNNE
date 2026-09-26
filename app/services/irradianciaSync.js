@@ -126,6 +126,19 @@ function parseDecimalComa(raw) {
     return Number.isFinite(n) ? n : null;
 }
 
+// El DTU a veces sigue mandando lecturas fantasma de noche (sin sol, sin sentido
+// guardarlas). Regla fija: solo se guarda lo que cae en [HORA_INICIO_VALIDA,
+// HORA_FIN_VALIDA) - 05:40 inclusive, 19:00 excluido. No es un filtro de consulta,
+// es un filtro de INGESTA: la fila descartada nunca llega a hacer INSERT, así que
+// un export de 19:00 a 5:00 da vacío sin tener que tocar el Sheet.
+const HORA_INICIO_VALIDA = '05:40:00';
+const HORA_FIN_VALIDA = '19:00:00';
+
+function horaFueraDeVentana(fecha_hora) {
+    const hora = fecha_hora.slice(11); // "YYYY-MM-DD HH:MM:SS" -> "HH:MM:SS"
+    return hora < HORA_INICIO_VALIDA || hora >= HORA_FIN_VALIDA;
+}
+
 const UPSERT_CHUNK_SIZE = 500;
 
 async function upsertRows(rows) {
@@ -157,16 +170,24 @@ async function syncOnce(serviceAccountKey, spreadsheetId, gid) {
     // costo (unas pocas centenas de filas por ciclo, por ahora) es aceptable
     // mientras el Sheet no crezca a decenas de miles de filas.
     const toUpsert = [];
+    let descartadasPorHorario = 0;
     for (const row of rows) {
         const [rawFecha, rawIrr, rawTemp] = row;
         const fecha_hora = parseFechaHora(rawFecha || '');
         if (!fecha_hora) continue;
+        if (horaFueraDeVentana(fecha_hora)) {
+            descartadasPorHorario++;
+            continue;
+        }
         toUpsert.push([fecha_hora, parseDecimalComa(rawIrr), parseDecimalComa(rawTemp)]);
     }
 
     if (toUpsert.length > 0) {
         await upsertRows(toUpsert);
         console.log(`[irradianciaSync] ${toUpsert.length} fila(s) sincronizada(s) desde el Sheet`);
+    }
+    if (descartadasPorHorario > 0) {
+        console.log(`[irradianciaSync] ${descartadasPorHorario} fila(s) descartada(s) por estar fuera del horario ${HORA_INICIO_VALIDA}-${HORA_FIN_VALIDA}`);
     }
 }
 
