@@ -133,6 +133,18 @@ function checkDisconnectionManeuver(relayNum, command) {
     return { ok: true };
 }
 
+// Mientras dura la ventana de Fault (ver scheduleFaultCheck/faultWindowEndsAt), Relay 3
+// queda bloqueado: no se puede apagar hasta que termine la espera de reconexión. Antes
+// apagarlo cancelaba el fault pendiente (una "salida de emergencia" implícita); ahora
+// esa salida ya no existe a pedido explícito - el bloqueo tiene que sostenerse los
+// ~320s enteros para que el cartel/ícono de "Bloqueado" en el frontend sea verdad.
+function checkFaultLock(relayNum, command) {
+    if (relayNum !== 3 || command !== "relay_off") return { ok: true };
+    if (!faultWindowEndsAt || faultWindowEndsAt <= Date.now()) return { ok: true };
+    const restanteS = Math.ceil((faultWindowEndsAt - Date.now()) / 1000);
+    return { ok: false, message: `El inversor está en modo FAULT, no se puede apagar hasta que termine la espera (~${restanteS}s)` };
+}
+
 async function registrarHistorial(relayNum, accion, faultDetectado = false) {
     try {
         await db.query(
@@ -165,7 +177,7 @@ async function handleCommand(req, res) {
         return res.status(400).json({ status: "error", message: "relayNum (1-3) y action ('relay_on'|'relay_off') son requeridos" });
     }
 
-    for (const check of [checkEmergencyManeuver, checkDisconnectionManeuver, checkCommissioningManeuver]) {
+    for (const check of [checkEmergencyManeuver, checkDisconnectionManeuver, checkCommissioningManeuver, checkFaultLock]) {
         const result = check(num, action);
         if (!result.ok) {
             return res.status(409).json({ status: "error", message: result.message });

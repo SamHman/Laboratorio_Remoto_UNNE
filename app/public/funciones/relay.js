@@ -89,7 +89,8 @@ function setButtonEnabled(elementId, enabled) {
 }
 
 function refreshButtonEnabled(relayNum) {
-    setButtonEnabled(RELAY_ELEMENTS[relayNum], espConnected && !buttonCooldowns[relayNum]);
+    const bloqueadoPorFault = relayNum === 3 && !!faultWindowEndsAt && faultWindowEndsAt > Date.now();
+    setButtonEnabled(RELAY_ELEMENTS[relayNum], espConnected && !buttonCooldowns[relayNum] && !bloqueadoPorFault);
 }
 
 function refreshAllButtons() {
@@ -123,8 +124,17 @@ function checkDisconnectionManeuver(relayNum, action) {
     return { ok: true };
 }
 
+// Mismo bloqueo que checkFaultLock en relay.controller.js - acá solo para feedback
+// instantáneo, el servidor es quien realmente lo hace cumplir.
+function checkFaultLock(relayNum, action) {
+    if (relayNum !== 3 || action !== 'relay_off') return { ok: true };
+    if (!faultWindowEndsAt || faultWindowEndsAt <= Date.now()) return { ok: true };
+    const restanteS = Math.ceil((faultWindowEndsAt - Date.now()) / 1000);
+    return { ok: false, message: `El inversor está en modo FAULT, no se puede apagar hasta que termine la espera (~${restanteS}s)` };
+}
+
 function checkInterlocks(relayNum, action) {
-    for (const check of [checkEmergencyManeuver, checkDisconnectionManeuver, checkCommissioningManeuver]) {
+    for (const check of [checkEmergencyManeuver, checkDisconnectionManeuver, checkCommissioningManeuver, checkFaultLock]) {
         const result = check(relayNum, action);
         if (!result.ok) return result;
     }
@@ -171,6 +181,7 @@ function crearBannerFault() {
 // depender de la frecuencia de mensajes del WS.
 function actualizarBannerFault() {
     const activo = !!faultWindowEndsAt && faultWindowEndsAt > Date.now();
+    refreshButtonEnabled(3); // el botón se re-habilita apenas termina la ventana, sin esperar el próximo relay_status
     if (!activo) {
         ocultarBannerFault();
         return;
