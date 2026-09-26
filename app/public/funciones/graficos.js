@@ -84,28 +84,28 @@ function createChartConfig(onClick) {
             onClick,
             scales: {
                 x: {
-                    ticks: { color: '#0000' },
+                    ticks: { color: 'rgba(0,0,0,0.5)' },
                     grid: { color: 'rgba(224, 224, 224, 0.1)' }
                 },
                 y: {
                     type: 'linear',
                     position: 'left',
                     beginAtZero: true,
-                    ticks: { color: '#0000' },
+                    ticks: { color: 'rgba(0,0,0,0.5)' },
                     grid: { color: 'rgba(224, 224, 224, 0.1)' }
                 },
                 y1: {
                     type: 'linear',
                     position: 'right',
                     beginAtZero: true,
-                    ticks: { color: '#0000' },
+                    ticks: { color: 'rgba(0,0,0,0.5)' },
                     grid: { drawOnChartArea: false }
                 }
             },
             plugins: {
                 legend: {
                     labels: {
-                        color: '#0000',
+                        color: 'rgba(0,0,0,0.5)',
                         // La serie instantánea solo figura mientras tiene puntos
                         filter: (item, data) => item.datasetIndex !== DATASET_INSTANTANEO
                             || data.datasets[DATASET_INSTANTANEO].data.some(v => v !== null)
