@@ -997,6 +997,25 @@ img.relay-disconnected {
     animation: slideIn 0.3s ease-out;
 }
 
+.progress-notif-close {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: white;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.progress-notif-close:hover {
+    opacity: 1;
+}
+
 .progress-notif.notif-out {
     animation: slideOut 0.3s ease-out;
 }

@@ -15,6 +15,7 @@ let relayStates = { 1: 'on', 2: 'on', 3: 'on' };
 let espConnected = false;
 const buttonCooldowns = {};
 let cerrarBannerFault = null;
+let faultWindowActive = false; // true mientras dura el banner de espera de reconexión
 let socket = null;
 
 function updateRelayVisual(elementId, state) {
@@ -41,7 +42,10 @@ function updateRelayVisual(elementId, state) {
     }
 }
 
-// El inversor no tiene comando propio: su ícono se deriva del estado de Relay 3.
+// El inversor no tiene comando propio: su ícono se deriva del estado de Relay 3,
+// salvo mientras dura la ventana de espera de reconexión tras encender Relay 3
+// (faultWindowActive, ver manejarBannerFault) - ahí se fuerza FAULT aunque el
+// relé ya esté "on", para que el ícono acompañe al banner de esos ~320s.
 // (El código viejo tenía un tercer caso "OFF" para cuando R1/R2/R3 están todos
 // apagados, pero nunca se ejecutaba: el primer "if" ya cubre cualquier R3 apagado.)
 function updateInverterState() {
@@ -50,7 +54,7 @@ function updateInverterState() {
     const block = document.getElementById('block-goodwe-inverter');
     if (!img || !status || !block) return;
 
-    const relay3On = relayStates[3] === 'on';
+    const relay3On = relayStates[3] === 'on' && !faultWindowActive;
     block.classList.remove('on', 'fault');
     img.classList.remove('on', 'fault');
 
@@ -123,10 +127,17 @@ function checkInterlocks(relayNum, action) {
 function manejarBannerFault(wasOn, isOn) {
     if (!wasOn && isOn) {
         if (cerrarBannerFault) cerrarBannerFault();
-        cerrarBannerFault = mostrarProgreso('Inversor en modo Fault esperando reconexión...', FAULT_DELAY_S);
+        faultWindowActive = true;
+        updateInverterState();
+        cerrarBannerFault = mostrarProgreso('Inversor en modo Fault esperando reconexión...', FAULT_DELAY_S, () => {
+            faultWindowActive = false;
+            cerrarBannerFault = null;
+            updateInverterState();
+        });
     } else if (wasOn && !isOn && cerrarBannerFault) {
-        cerrarBannerFault();
+        const cerrar = cerrarBannerFault;
         cerrarBannerFault = null;
+        cerrar(); // dispara el mismo callback de arriba: faultWindowActive=false + updateInverterState()
     }
 }
 
