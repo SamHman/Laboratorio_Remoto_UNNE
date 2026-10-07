@@ -36,7 +36,7 @@ function updateRelayVisual(elementId, state) {
     status.classList.remove('on', 'off', 'disconnected');
     block.classList.add(state);
     status.classList.add(state);
-    img.classList.toggle('relay-disconnected', state === 'disconnected'); // filtro gris (SCADA.CSS)
+    img.classList.toggle('relay-disconnected', state === 'disconnected'); // filtro gris (SCADA.css)
 
     if (state === 'on') {
         img.src = 'images/Relay_ON.png';

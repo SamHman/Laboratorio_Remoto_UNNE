@@ -1,4 +1,4 @@
-// Notificaciones flotantes (estilos en SCADA.CSS)
+// Notificaciones flotantes (estilos en SCADA.css)
 
 export function showNotification(message, type = 'info') {
     const notification = document.createElement('div');

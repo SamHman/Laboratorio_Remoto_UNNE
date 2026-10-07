@@ -73,7 +73,7 @@ tal cual**): `app/public/SCADA Copia_Seguridad.js`.
 
 `styleSCADA.css` es legacy (tiene `.modal`/`.modal-content` duplicados,
 `AllowOverride None` en el Apache de Docker hace que ni el `.htaccess` del
-proyecto se aplique ahí). Estilos nuevos van en `SCADA.CSS`.
+proyecto se aplique ahí). Estilos nuevos van en `SCADA.css`.
 
 ### Header, apilamiento (z-index) y `<main>` — cuidado si tocás esto
 

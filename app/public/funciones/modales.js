@@ -1,4 +1,4 @@
-// Apertura y cierre de modales (.modal.is-open en SCADA.CSS)
+// Apertura y cierre de modales (.modal.is-open en SCADA.css)
 
 export function abrirModal(modal) {
     modal.classList.add('is-open');
