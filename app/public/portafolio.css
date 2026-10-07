@@ -305,16 +305,15 @@ img { display: block; max-width: 100%; }
   color: var(--texto);
 }
 
-/* Imagen con texto encima. La altura la da el contenido (min-height + padding):
-   antes era fija (855px / 546px en celular) y con overflow:hidden recortaba el texto.
-   El texto va en una tarjeta con el mismo degradado ámbar del fondo de la página
-   (ver body::before), así se lee sin oscurecer la foto. */
+/* Imagen con texto encima (texto blanco directo sobre la foto, sin fondo ni velo).
+   La altura la da el contenido (min-height + padding): antes era fija (855px / 546px
+   en celular) y con overflow:hidden recortaba el texto. */
 .bloque-texto {
   position: relative;
   margin-bottom: 48px;
   width: 100%;
   min-height: 855px;
-  padding: 48px 24px;
+  padding: 64px 0;
   border-radius: var(--radio);
   overflow: hidden;
   box-shadow: var(--sombra);
@@ -322,17 +321,14 @@ img { display: block; max-width: 100%; }
   align-items: center;
   justify-content: center;
   text-align: center;
-  color: var(--texto);
+  color: var(--blanco);
 }
 
 .bloque-texto__contenido {
   position: relative;
   z-index: 2;
   max-width: 680px;
-  padding: 32px 28px;
-  border-radius: var(--radio);
-  background-image: radial-gradient(125% 125% at 50% 90%, #ffffff 40%, #f59e0b 100%);
-  box-shadow: var(--sombra);
+  padding: 0 24px;
 }
 
 .bloque-texto h3 { margin: 0 0 20px; font-size: 48px; font-weight: 300; }
@@ -403,8 +399,8 @@ img { display: block; max-width: 100%; }
   .slot--esquina { top: 14px; left: 14px; }
 
   /* Bloques con texto: crecen con el contenido, sin recortarlo */
-  .bloque-texto { min-height: 0; padding: 24px 12px; margin-bottom: 32px; }
-  .bloque-texto__contenido { padding: 22px 16px; }
+  .bloque-texto { min-height: 0; padding: 40px 0; margin-bottom: 32px; }
+  .bloque-texto__contenido { padding: 0 18px; }
   .bloque-texto h3 { font-size: 26px; margin-bottom: 14px; }
   .bloque-texto h2 { font-size: 20px; margin-bottom: 16px; }
   .bloque-texto p { font-size: 16px; line-height: 1.6; }
