@@ -23,6 +23,9 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 const TOLERANCIA_INVERSOR_SEGUNDOS = 60;
 
+// Excel admite 1.048.576 filas por hoja (encabezado incluido): se parte en varias hojas
+const FILAS_POR_HOJA = 1000000;
+
 const COLUMNAS_INVERSOR = [
     'Vpv1', 'Vpv2', 'Ipv1', 'Ipv2',
     'Vac1', 'Vac2', 'Vac3',
@@ -151,19 +154,26 @@ function alinearConInversor(array $sensor, array $inversor): array
 function enviarExcel(array $filas, string $prefijoArchivo): void
 {
     $encabezados = array_merge(['fecha_hora'], COLUMNAS_INVERSOR, ['temperatura', 'irradiancia']);
-    $matriz = [$encabezados];
-    foreach ($filas as $fila) {
-        $matriz[] = array_map(
-            fn($columna) => ($columna === 'fecha_hora' || $fila[$columna] === null)
-                ? $fila[$columna]
-                : round((float) $fila[$columna], 2),
-            $encabezados
-        );
-    }
-
     $spreadsheet = new Spreadsheet();
+
     // null = celda vacía (inversor sin registro dentro de la tolerancia)
-    $spreadsheet->getActiveSheet()->fromArray($matriz, null, 'A1');
+    foreach (array_chunk($filas, FILAS_POR_HOJA) as $i => $bloque) {
+        $hoja = $i === 0 ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
+        $hoja->setTitle('Datos ' . ($i + 1));
+
+        $matriz = [$encabezados];
+        foreach ($bloque as $fila) {
+            $matriz[] = array_map(
+                fn($columna) => ($columna === 'fecha_hora' || $fila[$columna] === null)
+                    ? $fila[$columna]
+                    : round((float) $fila[$columna], 2),
+                $encabezados
+            );
+        }
+        $hoja->fromArray($matriz, null, 'A1');
+        unset($matriz);
+    }
+    unset($filas);
 
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     header('Content-Disposition: attachment;filename="' . $prefijoArchivo . date('Y-m-d_His') . '.xlsx"');
@@ -181,8 +191,9 @@ try {
         responderJson(400, 'Faltan parámetros de fecha.');
     }
 
-    ini_set('memory_limit', '512M');
-    set_time_limit(300);
+    // Rangos de años (millones de filas): ver también proxy_read_timeout de nginx para /app/api/
+    ini_set('memory_limit', '4096M');
+    set_time_limit(1800);
 
     $pdo = conectar();
 

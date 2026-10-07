@@ -62,6 +62,9 @@ services:
       dockerfile: Dockerfile.php
     container_name: labvirtualunne_php
     restart: unless-stopped
+    # Tope duro de RAM (exportaciones grandes a Excel): VPS compartida con otros clientes
+    mem_limit: 4g
+    memswap_limit: 4g
     depends_on:
       mysql:
         condition: service_healthy

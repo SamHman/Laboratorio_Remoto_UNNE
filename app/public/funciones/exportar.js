@@ -4,7 +4,7 @@ import { API_PHP_BASE } from './config.js';
 import { showNotification, mostrarProgreso } from './notificaciones.js';
 import { abrirModal, cerrarModal } from './modales.js';
 
-const MAX_DIAS = 7;
+const MENSAJE_LIMITE_EXCEDIDO = 'Se ha excedido el límite de datos extraíble. Disminuya el rango de fechas.';
 const TIEMPO_ESTIMADO = 60; // segundos que muestra la cuenta regresiva
 
 // 'YYYY-MM-DDTHH:MM' (input datetime-local) -> 'DD-MM-YYYY HH-MM' para el nombre del archivo
@@ -37,10 +37,6 @@ async function exportar(exportModal) {
     }
 
     const diffDias = (new Date(endTime) - new Date(startTime)) / (1000 * 60 * 60 * 24);
-    if (diffDias > MAX_DIAS) {
-        showNotification('El rango de fechas no puede ser mayor a 1 semana (7 días)', 'error');
-        return;
-    }
     if (diffDias < 0) {
         showNotification('La fecha inicial no puede ser mayor que la fecha final', 'error');
         return;
@@ -67,14 +63,15 @@ async function exportar(exportModal) {
             // 200 sin Excel: el PHP no encontró datos en el rango
             showNotification('No se disponen de datos para el rango de fechas seleccionado.', 'warning');
         } else {
-            // 500: falla real del servidor (p. ej. sin conexión a la base), no falta de datos
+            // 500/502/504: típicamente el rango es tan grande que se agotó la memoria o el tiempo del servidor
             const detalle = await response.text();
             console.error(`[EXPORT] El servidor respondió ${response.status}:`, detalle.slice(0, 300));
-            showNotification(`Error del servidor al exportar (código ${response.status}).`, 'error');
+            showNotification(MENSAJE_LIMITE_EXCEDIDO, 'error');
         }
     } catch (error) {
+        // Conexión cortada (p. ej. el contenedor PHP se reinició por falta de memoria)
         console.error('[EXPORT] Error al exportar:', error);
-        showNotification('Error al exportar: ' + error.message, 'error');
+        showNotification(MENSAJE_LIMITE_EXCEDIDO, 'error');
     }
 
     cerrarModal(exportModal);
