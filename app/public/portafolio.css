@@ -408,6 +408,7 @@ img { display: block; max-width: 100%; }
   /* Capturas "qué puede / qué no puede hacer": se ven enteras, sin recortar */
   .par-vertical { gap: 40px; }
   .par-vertical .hero { min-height: 0; height: auto; padding: 0; aspect-ratio: 16 / 10; }
+  .par-vertical .slot--fondo { background: transparent; } /* las franjas laterales muestran el degradado de la página, no gris oscuro */
   .par-vertical .slot--fondo img { object-fit: contain; }
   .par-vertical__texto { padding: 16px 16px 0; font-size: 17px; }
 
