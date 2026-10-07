@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proyecto</title>
+  <link rel="stylesheet" href="portafolio.css">
+</head>
+<body>
+  <!-- =========================================================
+       FRANJA SUPERIOR: logo UNNE a la izquierda + título centrado
+       ========================================================= -->
+  <div class="topbar" id="inicio">
+    <img src="images/UNNE_logo.png" alt="Logo UNNE" class="topbar__logo">
+    <div class="topbar__texto">
+      <h2 class="topbar__titulo">UNIVERSIDAD NACIONAL DEL NORDESTE</h2>
+      <div class="topbar__contenido">
+        FACULTAD DE CIENCIAS EXACTAS Y NATURALES Y AGRIMENSURA
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       1) PORTADA: imagen de fondo + título del proyecto
+       ========================================================= -->
+  <header class="hero">
+    <div class="slot slot--fondo">
+      <img src="images/titulo.jpg" alt="Paneles solares del laboratorio">
+    </div>
+
+    <div class="hero__contenido">
+      <h1>LABORATORIO REMOTO </h1>
+      <p>OPERACIÓN Y CARACTERIZACIÓN ENERGÉTICA DE CENTRAL FOTOVOLTAICA SEGÚN MÉTICAS ESTABLECIDAS EN LA NORMA IEC61724-1</p>
+      <nav class="navegacion-secciones" aria-label="Secciones de la página">
+        <a class="boton boton--navegacion" href="#descripcion">Descripción</a>
+        <a class="boton boton--navegacion" href="#objetivo-experiencia">Objetivo de la experiencia</a>
+        <a class="boton boton--navegacion" href="#casos">Casos</a>
+        <a class="boton boton--navegacion" href="#acceder-laboratorio">Acceder al laboratorio</a>
+      </nav>
+      
+    </div>
+  </header>
+
+  <!-- =========================================================
+       2) SECCIÓN: imagen con texto encima + 3 imágenes juntas
+       ========================================================= -->
+  <section class="seccion">
+    <!-- Imagen con texto encima -->
+    <div class="bloque-texto" id="descripcion">
+      <div class="slot slot--fondo">
+        <img src="images/descripcion1.jpg" alt="Transferencia automática (Alterna)">
+      </div>
+      <div class="bloque-texto__contenido">
+        <h3>DESCRIPCIÓN</h3>
+        <h2>SISTEMA FOTOVOLTAICO CONECTADO
+A RED</h2><p>
+        El laboratorio remoto se compone de un sistema fotovoltaico conectado a la red (SFCR), emplazado en el predio del Departamento de Ingeniería dentro del Campus Deodoro Roca.
+        El sistema generador se encuentra orientado en dirección noreste con ángulo de inclinación de 12°. El sistema posee una capacidad de generación
+de 6720 Wp y cuenta con un total
+de 28 módulos fotovoltaicos (FV) de 240
+Wp cada uno, para el desarrollo de esta experiencia se emplean únicamente 20 módulos (4800 Wp), configurados en dos cadenas (<i>strings</i>) de 10 paneles en serie de 10 módulos cada uno, Los tableros de corriente continua (CC) y corriente alterna (CA) se
+encuentran instalados dentro del Laboratorio de Sistemas Fotovoltaicos
+perteneciente al Grupo de energías renovables (GER).
+</p>
+</div>
+    </div>
+  </section>
+
+  <section class="seccion">
+    <!-- Imagen con texto encima -->
+    <div class="bloque-texto" id="descripcion">
+      <div class="slot slot--fondo">
+        <img src="images/descripcion2.jpg" alt="Transferencia automática (Alterna)">
+      </div>
+      <div class="bloque-texto__contenido">
+        <h3>Laboratorio de Sistemas Fotovoltaicos</h3>
+        <p>
+        El tablero de corriente continua (CC), donde acometen las líneas del generador fotovoltaico, integra seccionadores bajo carga de 440 Vcc, fusibles tipo NH de 500 V / 120 kA y dos contactores monofásicos dedicados a la maniobra individual de cada cadena (string).
+estos se conectan a un inversor trifásico de 5 kW de la marca GoodWe modelo GW5000-DT, cuya salida ingresa al tablero de corriente alterna (CA). Este último aloja las protecciones termomagnéticas de la línea, un contactor y un medidor de energía trifásicos.
+La totalidad de los contactores (tanto en CC como en CA) son gobernados mediante un microcontrolador ESP32, permitiendo la conmutación remota del sistema a través de la plataforma web del laboratorio.
+      </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="seccion">
+    <!-- Imagen con texto encima -->
+    <div class="bloque-texto" id="objetivo-experiencia">
+      <div class="slot slot--fondo">
+        <img src="images/objetivos.jpg" alt="Transferencia automática (Alterna)">
+        <span class="slot__vacio">Agregar imagen 4</span>
+      </div>
+      <div class="bloque-texto__contenido">
+        <h3>OBJETIVOS</h3>
+        <p>El estudiante debe ingresar al horario asignado al laboratorio y realizar una exportación de los valores de irradiancia y potencia tomados por los dispositivos en un lapso de 24 hrs, con ellos debe obtener los distintos yields de como especifica la norma y determinar el performance ratio de la pérgola solar en ese intervalo de tiempo, podrá tomar valores con el inversor trabajando a media potencia o en vacío, este ultimo por unica vez en cada experiencia.</p>
+      </div>
+    </div>
+<!--Que puede el usuario hacer -->
+    <div class="par-vertical">
+      <div class="par-vertical__item">
+        <div class="hero">
+          <div class="slot slot--fondo">
+            <img src="images/puedo1.png" alt="exportación">
+            <span class="slot__vacio">Agregar imagen 1</span>
+          </div>
+        </div>
+        <p class="par-vertical__texto">El usuario puede realizar una importación a excel de los datos medidos en un lapso de tiempo</p>
+      </div>
+      <div class="par-vertical__item">
+        <div class="hero">
+          <div class="slot slot--fondo">
+            <img src="images/puedo2.png" alt="gráficos">
+            <span class="slot__vacio">Agregar imagen 2</span>
+          </div>
+        </div>
+        <p class="par-vertical__texto">El usuario puede a demás de ver los datos en tiempo real, ver los valores de los mismos en cada punto de la gráfica</p>
+      </div>
+      <div class="par-vertical__item">
+        <div class="hero">
+          <div class="slot slot--fondo">
+            <img src="images/puedo3.png" alt="relays">
+            <span class="slot__vacio">Agregar imagen 3</span>
+          </div>
+        </div>
+        <p class="par-vertical__texto">El usuario puede,(con sus debidas restricciónes), interactuar con los respectivos contactores a través del esp32</p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- =========================================================
+       3) CASOS: 6 fotos (2 filas x 3) con descripción
+       ========================================================= -->
+  <section class="seccion" id="casos">
+    <h2>CASOS</h2>
+    <div class="grilla">
+
+      <article class="tarjeta">
+        <div class="slot slot--tarjeta">
+          <img src="images/Inverter_ON.png" alt="Inversor operando">
+          <span class="slot__vacio">Agregar foto</span>
+        </div>
+        <h3>Inversor Operando</h3>
+        <p>El Inversor se encontrará permanentemente prendido y transmitiendo datos desde las 5:30 a.m/6:30am hasta las 07:00 pm.</p>
+      </article>
+
+      <article class="tarjeta">
+        <div class="slot slot--tarjeta">
+          <img src="images/Inverter_OFF.png" alt="Inversor apagado">
+          <span class="slot__vacio">Agregar foto</span>
+        </div>
+        <h3>Inversor Apagado</h3>
+        <p>El inversor se encuentra apagado a partir de las 19:00 horas. El usuario no puede apagar el inversor en ninguna otra instancia.</p>
+      </article>
+
+      <article class="tarjeta">
+        <div class="slot slot--tarjeta">
+          <img src="images/Inverter_FAULT.png" alt="Falla del inversor">
+          <span class="slot__vacio">Agregar foto</span>
+        </div>
+        <h3>Inversor en FAULT</h3>
+        <p>El inversor entra en un modo de recalibración cuando se reconecta a la red eléctrica, es un estado que dura 300 segundos en los cuales este se encuentra realizando calibraciones internas.</p>
+      </article>
+
+      <article class="tarjeta">
+        <div class="slot slot--tarjeta">
+          <img src="images/Relay_ON.png" alt="Disyuntor de protección">
+          <span class="slot__vacio">Agregar foto</span>
+        </div>
+        <h3>El contactor se encuentra activado</h3>
+        <p>Ese es su estado por defecto debido a que el sistema generador debe estar en constante producción.</p>
+      </article>
+
+      <article class="tarjeta">
+        <div class="slot slot--tarjeta">
+          <img src="images/Relay_OFF.png" alt="Transferencia automática">
+          <span class="slot__vacio">Agregar foto</span>
+        </div>
+        <h3>El contactor se encuentra desactivado</h3>
+        <p>Este estado ocurre cuando el usuario apaga manualmente los contactores</p>
+      </article>
+
+      <article class="tarjeta">
+        <div class="slot slot--tarjeta">
+          <img src="images/Relay Desconectado.png" alt="Paneles solares">
+          <span class="slot__vacio">Agregar foto</span>
+        </div>
+        <h3>El esp32 se encuentra incomunicado</h3>
+        <p>Esto significa que no hay comunicación por internet entre el microcontrolador y el servidor. </p>
+      </article>
+
+    </div>
+  </section>
+
+<!-- Qué no puede el usuario hacer -->
+  <section class="seccion">
+    <div class="par-vertical">
+      <div class="par-vertical__item">
+        <div class="hero">
+          <div class="slot slot--fondo">
+            <img src="images/no apagar.png" alt="exportación">
+            <span class="slot__vacio">Agregar imagen 1</span>
+          </div>
+        </div>
+        <p class="par-vertical__texto">El usuario no tiene permitido apagar el inversor en ninguna instancia</p>
+      </div>
+      <div class="par-vertical__item">
+        <div class="hero">
+          <div class="slot slot--fondo">
+            <img src="images/no flotante.png" alt="gráficos">
+            <span class="slot__vacio">Agregar imagen 2</span>
+          </div>
+        </div>
+        <p class="par-vertical__texto">El usuario no puede desconectar ambos strings de continua con el inversor conectado a la red</p>
+      </div>
+      <div class="par-vertical__item">
+        <div class="hero">
+          <div class="slot slot--fondo">
+            <img src="images/Fault.png" alt="relays">
+            <span class="slot__vacio">Agregar imagen 3</span>
+          </div>
+        </div>
+        <p class="par-vertical__texto">Una vez que el usuario a reconectado el inversor a la red, el contactor trifásico quedará inhabilitado por las proximas dos horas y no podrá ser manipulado.</p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- =========================================================
+       4) CIERRE: mismo formato que la portada, clickeable.
+       Lleva a /login (acceso al SCADA).
+       ========================================================= -->
+  <section class="hero hero--cierre" id="acceder-laboratorio">
+    <div class="slot slot--fondo">
+      <img src="images/Ingreso.png" alt="Panel de control SCADA">
+      <span class="slot__vacio">Agregar imagen</span>
+    </div>
+
+    <!-- Imagen pequeña de esquina (45.45 x 48 px) -->
+    <div class="slot slot--esquina">
+      <img src="images/UNNE_logo.png" alt="Logo UNNE">
+      <span class="slot__vacio">IMG</span>
+    </div>
+
+    <a class="hero__enlace" href="/login">
+      <span class="hero__contenido">
+        <span class="hero__titulo">Ingresar al Laboratorio Remoto</span>
+        <span class="boton">Iniciar sesión</span>
+      </span>
+    </a>
+  </section>
+
+  <footer class="pie-pagina">
+    <a class="boton" href="#inicio">Volver arriba</a>
+  </footer>
+
+  <script>
+    // Muestra "Agregar imagen" si el archivo de img/ no existe
+    document.querySelectorAll('.slot img').forEach(function (img) {
+      var slot = img.closest('.slot');
+      function marcar() { slot.classList.toggle('con-imagen', img.naturalWidth > 0); }
+      img.addEventListener('load', marcar);
+      img.addEventListener('error', marcar);
+      if (img.complete) marcar();
+    });
+
+  </script>
+</body>
+</html>

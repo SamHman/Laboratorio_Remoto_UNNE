@@ -211,7 +211,41 @@ async function handleCommand(req, res) {
     return res.json({ status: "ok", relayNum: num, action });
 }
 
+const RESET_GAP_MS = 1500; // separación entre comandos al ESP32
+
+// Reset a condiciones normales: deja los 3 relés en ON (usado por el scheduler de
+// services/resetRelays.js). Se salta los interlocks a propósito - solo enciende, y
+// lo hace en orden 1, 2, 3 para que Relay 3 (inversor) encuentre la continua ya
+// conectada, igual que exige checkCommissioningManeuver. Devuelve:
+//   { ok: true, enviados: [..] }  -> listo (enviados puede estar vacío si ya estaban en ON)
+//   { ok: false, motivo }          -> no se pudo (bridge/ESP32 caído), conviene reintentar
+async function resetAllRelaysOn() {
+    const apagados = [1, 2, 3].filter(n => relayStates[n] !== "on");
+    if (apagados.length === 0) return { ok: true, enviados: [] };
+
+    if (!isBridgeConnected()) return { ok: false, motivo: "agente-puente no conectado" };
+    if (!esp32Connected) return { ok: false, motivo: "ESP32 de relés no conectado" };
+
+    const wasRelay3On = relayStates[3] === "on";
+    const enviados = [];
+    for (const num of apagados) {
+        try {
+            bridgeSocket.send(JSON.stringify({ type: "relay_command", command: `relay_on${num}` }));
+        } catch (error) {
+            console.error("[relay.controller] Error en reset al enviar relay_on" + num + ":", error);
+            return { ok: false, motivo: `error al enviar relay_on${num}` };
+        }
+        enviados.push(num);
+        registrarManiobra();
+        await registrarHistorial(num, "encendido");
+        if (num === 3 && !wasRelay3On) scheduleFaultCheck(num);
+        await new Promise(resolve => setTimeout(resolve, RESET_GAP_MS));
+    }
+    return { ok: true, enviados };
+}
+
 export {
+    resetAllRelaysOn,
     setBroadcastFn,
     attachBridge,
     isBridgeConnected,

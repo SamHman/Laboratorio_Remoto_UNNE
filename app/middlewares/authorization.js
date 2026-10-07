@@ -18,8 +18,8 @@ function soloPublico(req,res,next){
   const logueado = revisarCookie(req);
   console.log("[soloPublico] logueado:", logueado);
   if(!logueado) return next();
-  console.log("[soloPublico] Redirigiendo a /");
-  return res.redirect("/")
+  console.log("[soloPublico] Redirigiendo a /SCADA");
+  return res.redirect("/SCADA")
 }
 
 function revisarCookie(req){

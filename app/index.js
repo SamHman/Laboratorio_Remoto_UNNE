@@ -12,6 +12,7 @@ import * as dataController from "./controllers/data.controller.js";
 import * as relayController from "./controllers/relay.controller.js";
 import * as telemetryController from "./controllers/telemetry.controller.js";
 import { startIrradianciaSync } from "./services/irradianciaSync.js";
+import { startResetRelays } from "./services/resetRelays.js";
 
 // Server
 const app = express();
@@ -94,6 +95,9 @@ server.listen(PORT, () => {
 // Sincronización periódica del Sheet de irradiancia/temperatura -> datos_irradiancia
 startIrradianciaSync();
 
+// Reset diario de los relés a ON (18:40 hora Argentina)
+startResetRelays();
+
 // Manejo de señales para un cierre limpio
 const shutdown = (signal) => {
     console.log(`\nRecibida señal ${signal}. Cerrando servidor...`);
@@ -150,10 +154,10 @@ app.use(cookieParser())
 
 
 //URL
-// Cambiar la ruta principal '/' para que requiera autenticación y sirva SCADA.html
-app.get("/", authorization.soloAdmin, (req, res) => {
-    console.log("Sirviendo SCADA.html");
-    res.sendFile(path.join(__dirname, "pages", "admin", "SCADA.html"));
+// Página principal: informacion.html, pública (landing del laboratorio)
+app.get("/", (req, res) => {
+    console.log("Sirviendo informacion.html");
+    res.sendFile(path.join(__dirname, "pages", "informacion.html"));
 });
 // Nueva ruta para login, protegida para solo público
 app.get("/login", authorization.soloPublico, (req, res) => {

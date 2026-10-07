@@ -103,15 +103,15 @@ function checkEmergencyManeuver(relayNum, action) {
     if (action !== 'relay_off') return { ok: true };
     const r1 = relayStates[1] === 'on', r2 = relayStates[2] === 'on', r3 = relayStates[3] === 'on';
     if (!r3) return { ok: true };
-    if (relayNum === 2 && !r1 && r2) return { ok: false, message: 'Debes primero desconectar la Alterna' };
-    if (relayNum === 1 && !r2 && r1) return { ok: false, message: 'Debes primero desconectar la Alterna' };
+    if (relayNum === 2 && !r1 && r2) return { ok: false, message: 'Operación denegada: Desconectar el inversor de la línea' };
+    if (relayNum === 1 && !r2 && r1) return { ok: false, message: 'Operación denegada: Desconectar el inversor de la línea' };
     return { ok: true };
 }
 
 function checkCommissioningManeuver(relayNum, action) {
     if (action !== 'relay_on') return { ok: true };
     if (relayNum === 3 && !(relayStates[1] === 'on' || relayStates[2] === 'on')) {
-        return { ok: false, message: 'No se puede conectar el Inversor a la Alterna sin previamente la Alimentación de Continua' };
+        return { ok: false, message: 'Secuencia incorrecta, conectar primero los strings de continua' };
     }
     return { ok: true };
 }
@@ -119,8 +119,8 @@ function checkCommissioningManeuver(relayNum, action) {
 function checkDisconnectionManeuver(relayNum, action) {
     if (action !== 'relay_off') return { ok: true };
     const r1 = relayStates[1] === 'on', r2 = relayStates[2] === 'on', r3 = relayStates[3] === 'on';
-    if (!r3 && !r1 && relayNum === 2) return { ok: false, message: 'No está permitido apagar el Inversor' };
-    if (!r2 && relayNum === 1) return { ok: false, message: 'No está permitido apagar el Inversor' };
+    if (!r3 && !r1 && relayNum === 2) return { ok: false, message: 'No se permite apagar el Inversor' };
+    if (!r2 && relayNum === 1) return { ok: false, message: 'No se permite apagar el Inversor' };
     return { ok: true };
 }
 
@@ -130,7 +130,7 @@ function checkFaultLock(relayNum, action) {
     if (relayNum !== 3 || action !== 'relay_off') return { ok: true };
     if (!faultWindowEndsAt || faultWindowEndsAt <= Date.now()) return { ok: true };
     const restanteS = Math.ceil((faultWindowEndsAt - Date.now()) / 1000);
-    return { ok: false, message: `El inversor está en modo FAULT, no se puede apagar hasta que termine la espera (~${restanteS}s)` };
+    return { ok: false, message: `Operación denegada: Inversor en modo (FAULT) (~${restanteS}s), contactor inhabilitado` };
 }
 
 function checkInterlocks(relayNum, action) {
