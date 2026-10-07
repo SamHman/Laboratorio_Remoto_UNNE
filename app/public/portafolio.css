@@ -21,6 +21,7 @@ body {
   color: var(--texto);
   background-color: var(--gris-fondo);
   position: relative;
+  overflow-x: clip;
 }
 
 /* Amber Glow Background (igual que style.css) */
@@ -304,12 +305,14 @@ img { display: block; max-width: 100%; }
   color: var(--texto);
 }
 
-/* Imagen con texto encima, mismo tamaño que el bloque de 3 */
+/* Imagen con texto encima. La altura la da el contenido (min-height + padding):
+   antes era fija (855px / 546px en celular) y con overflow:hidden recortaba el texto. */
 .bloque-texto {
   position: relative;
   margin-bottom: 48px;
   width: 100%;
-  height: 855px;
+  min-height: 855px;
+  padding: 64px 0;
   border-radius: var(--radio);
   overflow: hidden;
   box-shadow: var(--sombra);
@@ -320,15 +323,26 @@ img { display: block; max-width: 100%; }
   color: var(--blanco);
 }
 
+/* Velo oscuro sobre la foto para que el texto blanco se lea sobre cualquier fondo */
+.bloque-texto::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.45);
+}
+
 .bloque-texto__contenido {
   position: relative;
   z-index: 2;
   max-width: 680px;
   padding: 0 24px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
 .bloque-texto h3 { margin: 0 0 20px; font-size: 48px; font-weight: 300; }
-.bloque-texto p { margin: 0; font-size: 19px; line-height: 1.7; }
+.bloque-texto h2 { margin: 0 0 24px; font-size: 32px; font-weight: 400; }
+.bloque-texto p { margin: 0; font-size: 19px; line-height: 1.7; overflow-wrap: anywhere; }
 
 /* Grilla 3 x 2 */
 .grilla {
@@ -367,19 +381,46 @@ img { display: block; max-width: 100%; }
 @media (max-width: 900px) {
   .grilla { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hero h1, .hero__titulo { font-size: 40px; }
+  .bloque-texto { min-height: 640px; }
+  .bloque-texto h3 { font-size: 38px; }
+  .par-vertical { gap: 56px; }
 }
 
 @media (max-width: 600px) {
-  .grilla { grid-template-columns: 1fr; }
-  .seccion { padding: 56px 16px; }
-  .seccion h2 { font-size: 30px; margin-bottom: 32px; }
-  .hero { min-height: 480px; }
-  .hero h1, .hero__titulo { font-size: 30px; }
+  .grilla { grid-template-columns: 1fr; gap: 20px; }
+  .seccion { padding: 40px 16px; }
+  .seccion h2 { font-size: 28px; margin-bottom: 28px; }
+
+  /* Franja superior: logo chico + títulos que pueden partirse en varias líneas */
+  .topbar { grid-template-columns: auto 1fr; gap: 12px; padding: 10px 14px; }
+  .topbar__logo { height: 36px; }
+  .topbar__texto { grid-column: 2; }
+  .topbar__titulo { font-size: 14px; line-height: 1.25; }
+  .topbar__contenido { font-size: 11px; line-height: 1.3; margin-top: 2px; }
+
+  .hero { min-height: 480px; height: auto; padding: 48px 0; }
+  .hero h1, .hero__titulo { font-size: 28px; }
   .hero p, .hero__texto { font-size: 16px; }
-  .hero__contenido > p { font-size: 18px; }
+  .hero__contenido { gap: 18px; padding: 0 16px; }
+  .hero__contenido > p { font-size: 15px; letter-spacing: 0; line-height: 1.5; }
   .navegacion-secciones { gap: 8px; }
   .boton--navegacion { padding: 10px 12px; font-size: 14px; }
-  .bloque-texto { height: 546px; }
-  .bloque-texto h3 { font-size: 30px; }
-  .bloque-texto p { font-size: 16px; }
+  .slot--esquina { top: 14px; left: 14px; }
+
+  /* Bloques con texto: crecen con el contenido, sin recortarlo */
+  .bloque-texto { min-height: 0; padding: 40px 0; margin-bottom: 32px; }
+  .bloque-texto__contenido { padding: 0 18px; }
+  .bloque-texto h3 { font-size: 26px; margin-bottom: 14px; }
+  .bloque-texto h2 { font-size: 20px; margin-bottom: 16px; }
+  .bloque-texto p { font-size: 16px; line-height: 1.6; }
+
+  /* Capturas "qué puede / qué no puede hacer": se ven enteras, sin recortar */
+  .par-vertical { gap: 40px; }
+  .par-vertical .hero { min-height: 0; height: auto; padding: 0; aspect-ratio: 16 / 10; }
+  .par-vertical .slot--fondo img { object-fit: contain; }
+  .par-vertical__texto { padding: 16px 16px 0; font-size: 17px; }
+
+  .tarjeta p { font-size: 15px; }
+  .hero--cierre { min-height: 380px; }
+  .pie-pagina { padding: 20px 16px; }
 }
