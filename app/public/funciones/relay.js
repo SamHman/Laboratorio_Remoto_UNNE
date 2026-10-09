@@ -284,13 +284,18 @@ async function toggleRelay(relayNum) {
 
     buttonCooldowns[relayNum] = true;
     refreshButtonEnabled(relayNum);
+    // Sin cierre automático: se saca junto con el fin del cooldown (o antes si el comando falla)
+    const cerrarAviso = showNotification('Orden en ejecución, por favor espere.', 'success', null);
 
     // El estado visual definitivo llega por WS (relay_status) — acá no se toca a mano.
-    await sendCommand(relayNum, action);
+    const enviado = await sendCommand(relayNum, action);
+    // Si falló, sendCommand ya mostró el error: no dejar el aviso verde encima
+    if (!enviado) cerrarAviso();
 
     setTimeout(() => {
         buttonCooldowns[relayNum] = false;
         refreshButtonEnabled(relayNum);
+        cerrarAviso();
     }, BUTTON_COOLDOWN_MS);
 }
 

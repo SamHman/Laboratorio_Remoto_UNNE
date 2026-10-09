@@ -1,14 +1,22 @@
 // Notificaciones flotantes (estilos en SCADA.css)
 
-export function showNotification(message, type = 'info') {
+// duracionMs = null: no se cierra sola, queda hasta que se llame a la función que
+// devuelve (p. ej. el aviso de "orden en ejecución" de relay.js, que dura lo que el cooldown).
+export function showNotification(message, type = 'info', duracionMs = 3000) {
     const notification = document.createElement('div');
     notification.className = `export-notif notif-${type}`;
     notification.textContent = message;
     document.body.appendChild(notification);
-    setTimeout(() => {
+
+    let cerrada = false;
+    function cerrar() {
+        if (cerrada) return;
+        cerrada = true;
         notification.classList.add('notif-out');
         setTimeout(() => notification.remove(), 300);
-    }, 3000);
+    }
+    if (duracionMs !== null) setTimeout(cerrar, duracionMs);
+    return cerrar;
 }
 
 // Notificación con spinner y cuenta regresiva. Devuelve una función para cerrarla.

@@ -1,4 +1,6 @@
-// Exportación del dashboard a Excel (exportar_datos_dashboard.php)
+// Exportación del dashboard a Excel:
+//   Potencia / Irradiancia -> exportar_datos_tabla.php (una sola tabla, tal cual)
+//   Ambos                  -> exportar_datos_dashboard.php (irradiancia emparejada con el inversor)
 
 import { API_PHP_BASE } from './config.js';
 import { showNotification, mostrarProgreso } from './notificaciones.js';
@@ -6,6 +8,14 @@ import { abrirModal, cerrarModal } from './modales.js';
 
 const MENSAJE_LIMITE_EXCEDIDO = 'Se ha excedido el límite de datos extraíble. Disminuya el rango de fechas.';
 const TIEMPO_ESTIMADO = 60; // segundos que muestra la cuenta regresiva
+
+const TIPOS_EXPORTACION = {
+    potencia: { endpoint: 'exportar_datos_tabla.php', prefijo: 'Potencia' },
+    irradiancia: { endpoint: 'exportar_datos_tabla.php', prefijo: 'Irradiancia' },
+    ambos: { endpoint: 'exportar_datos_dashboard.php', prefijo: 'Mediciones' },
+};
+
+let tipoSeleccionado = 'ambos';
 
 // 'YYYY-MM-DDTHH:MM' (input datetime-local) -> 'DD-MM-YYYY HH-MM' para el nombre del archivo
 function formatearParaArchivo(valor) {
@@ -46,17 +56,18 @@ async function exportar(exportModal) {
     const start = startTime.replace('T', ' ');
     const end = endTime.replace('T', ' ');
 
+    const { endpoint, prefijo } = TIPOS_EXPORTACION[tipoSeleccionado];
     const cerrarProgreso = mostrarProgreso('Exportando datos a Excel...', TIEMPO_ESTIMADO);
     try {
-        const response = await fetch(`${API_PHP_BASE}/exportar_datos_dashboard.php`, {
+        const response = await fetch(`${API_PHP_BASE}/${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ start, end })
+            body: JSON.stringify({ tipo: tipoSeleccionado, start, end })
         }).finally(cerrarProgreso);
 
         const contentType = response.headers.get('Content-Type') || '';
         if (contentType.includes('spreadsheetml.sheet')) {
-            const nombre = `Mediciones_${formatearParaArchivo(startTime)}_${formatearParaArchivo(endTime)}.xlsx`;
+            const nombre = `${prefijo}_${formatearParaArchivo(startTime)}_${formatearParaArchivo(endTime)}.xlsx`;
             descargarArchivo(await response.blob(), nombre);
             showNotification('Datos exportados exitosamente', 'success');
         } else if (response.ok) {
@@ -81,6 +92,18 @@ export function initExportar() {
     const exportModal = document.getElementById('export-modal');
     const confirmButton = document.getElementById('confirm-export-btn');
     document.getElementById('export-icon').addEventListener('click', () => abrirModal(exportModal));
+
+    const botonesTipo = exportModal.querySelectorAll('.export-tipo-btn');
+    botonesTipo.forEach(boton => {
+        boton.addEventListener('click', () => {
+            tipoSeleccionado = boton.dataset.tipo;
+            botonesTipo.forEach(b => {
+                const activo = b === boton;
+                b.classList.toggle('active', activo);
+                b.setAttribute('aria-pressed', String(activo));
+            });
+        });
+    });
 
     // Deshabilitado mientras dura una exportación, para no lanzar dos a la vez
     confirmButton.addEventListener('click', async () => {

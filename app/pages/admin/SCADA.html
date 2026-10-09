@@ -35,9 +35,9 @@
     <main class="dashboard-container">
         <div class="chart-container" id="chart-container-main">
             <canvas id="realTimeChart"></canvas>
-            <button id="export-icon" class="chart-action-btn export-btn" title="Exportar datos a Excel">
+            <button id="export-icon" class="chart-action-btn export-btn" title="Exportar datos como Excel">
                 <i class='bx bx-download'></i>
-                <span>Exportar Excel</span>
+                <span>Exportar como Excel</span>
             </button>
             <button class="chart-action-btn expand-btn" title="Expandir gráfico">
                 <i class='bx bx-expand'></i>
@@ -167,6 +167,11 @@
         <span class="close-button">&times;</span>
         <div class="modal-content export-modal-content">
             <h2>Exportar Datos</h2>
+            <div class="export-tipo" role="group" aria-label="Datos a exportar">
+                <button type="button" class="export-tipo-btn" data-tipo="potencia" aria-pressed="false">Potencia</button>
+                <button type="button" class="export-tipo-btn" data-tipo="irradiancia" aria-pressed="false">Irradiancia</button>
+                <button type="button" class="export-tipo-btn active" data-tipo="ambos" aria-pressed="true">Ambos</button>
+            </div>
             <div class="export-options">
                 <label for="start-time">Desde:</label>
                 <input type="datetime-local" id="start-time" name="start-time">
