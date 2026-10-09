@@ -313,7 +313,11 @@ header h1 {
    contenedor, y .chart-container no tiene alto propio (en pantallas angostas
    colapsaba). */
 #chart-container-main {
-    min-height: 400px;
+    min-height: 470px;
+    /* Franja libre debajo del gráfico para los botones de acción (Exportar Excel y
+       expandir): como están en position:absolute, sin este espacio quedaban encima
+       del eje de tiempo. El gráfico ocupa el área restante (Chart.js descuenta el padding). */
+    padding-bottom: 70px;
 }
 
 /* Botones de acción en el chart-container */

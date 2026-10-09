@@ -13,7 +13,7 @@ import db from '../db.js';
 // Diseño sin estado local: en cada ciclo se pregunta a la propia tabla
 // (MAX(fecha_hora)) hasta dónde ya se sincronizó, y se descartan las filas del
 // Sheet que no sean más nuevas. Sobrevive a reinicios/redeploys sin archivo de
-// estado aparte, a costa de releer todo el rango A2:C en cada ciclo — aceptable
+// estado aparte, a costa de releer todo el rango A1:F en cada ciclo — aceptable
 // mientras el Sheet no crezca a decenas de miles de filas; si eso pasa, conviene
 // paginar por número de fila en vez de por fecha.
 
@@ -89,9 +89,16 @@ async function resolveSheetTitle(accessToken, spreadsheetId, gid) {
     return cachedSheetTitle;
 }
 
+// Columnas del Sheet que se leen (índice base 0 dentro de cada fila): A = fecha/hora,
+// C = irradiancia, F = temperatura. Las columnas B, D y E se leen pero no se usan.
+const COL_FECHA = 0;
+const COL_IRRADIANCIA = 2;
+const COL_TEMPERATURA = 5;
+
 async function fetchSheetRows(accessToken, spreadsheetId, sheetTitle) {
     // Sin fila de encabezado: la fila 1 ya es el primer dato registrado.
-    const range = `${sheetTitle}!A1:C`;
+    // El rango llega hasta F para incluir la columna de temperatura.
+    const range = `${sheetTitle}!A1:F`;
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
     const data = await sheetsApiGet(accessToken, url);
     return data.values || [];
@@ -172,7 +179,11 @@ async function syncOnce(serviceAccountKey, spreadsheetId, gid) {
     const toUpsert = [];
     let descartadasPorHorario = 0;
     for (const row of rows) {
-        const [rawFecha, rawIrr, rawTemp] = row;
+        // La API de Sheets omite las celdas vacías del final de la fila: una columna
+        // ausente llega como undefined y parseDecimalComa la convierte en null
+        const rawFecha = row[COL_FECHA];
+        const rawIrr = row[COL_IRRADIANCIA];
+        const rawTemp = row[COL_TEMPERATURA];
         const fecha_hora = parseFechaHora(rawFecha || '');
         if (!fecha_hora) continue;
         if (horaFueraDeVentana(fecha_hora)) {
@@ -184,7 +195,9 @@ async function syncOnce(serviceAccountKey, spreadsheetId, gid) {
 
     if (toUpsert.length > 0) {
         await upsertRows(toUpsert);
-        console.log(`[irradianciaSync] ${toUpsert.length} fila(s) sincronizada(s) desde el Sheet`);
+        // Última fila sincronizada: permite comprobar en el log qué columnas se están leyendo
+        const [uFecha, uIrr, uTemp] = toUpsert[toUpsert.length - 1];
+        console.log(`[irradianciaSync] ${toUpsert.length} fila(s) sincronizada(s) desde el Sheet. Última: ${uFecha} | irradiancia (col C) = ${uIrr} | temperatura (col F) = ${uTemp}`);
     }
     if (descartadasPorHorario > 0) {
         console.log(`[irradianciaSync] ${descartadasPorHorario} fila(s) descartada(s) por estar fuera del horario ${HORA_INICIO_VALIDA}-${HORA_FIN_VALIDA}`);
