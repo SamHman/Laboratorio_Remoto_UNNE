@@ -258,11 +258,12 @@ async function sendCommand(relayNum, action) {
         if (response.ok) return true;
 
         const data = await response.json().catch(() => ({}));
-        if (response.status === 503) {
-            showNotification('El agente-puente no está conectado, no se puede alcanzar el ESP32', 'error');
-        } else {
-            showNotification(data.message || 'No se pudo enviar el comando', 'error');
-        }
+        // El servidor manda el motivo real (agente-puente caído, ESP32 desconectado, orden en
+        // curso, rechazo del ESP32, etc.); el texto fijo del 503 es solo el respaldo
+        const respaldo = response.status === 503
+            ? 'El agente-puente no está conectado, no se puede alcanzar el ESP32'
+            : 'No se pudo enviar el comando';
+        showNotification(data.message || respaldo, 'error');
         return false;
     } catch (error) {
         console.error('[relay] Error de red al enviar comando:', error);

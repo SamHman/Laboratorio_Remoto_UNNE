@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import db from "../db.js";
 import { registrarManiobra } from "../services/maniobras.js";
 
@@ -23,6 +24,17 @@ const FAULT_DELAY_MS = 320 * 1000;
 // que la ventana real (server-side) hubiera terminado.
 let faultWindowEndsAt = null;
 
+// Una sola orden en curso a la vez, para TODAS las cuentas y navegadores. Se toma al
+// entrar a handleCommand / resetAllRelaysOn y se suelta recién cuando el ESP32 confirmó
+// (ACK/NACK) o falló, para que la orden siguiente se valide contra el estado ya actualizado.
+// Las órdenes que llegan con el bloqueo tomado se rechazan, no se encolan.
+let ocupado = false;
+
+// Orden enviada al bridge-agent y esperando su relay_command_result: { id, resolve, timer }
+let ordenEnCurso = null;
+// El bridge-agent corta a los 3s si el ESP32 no responde; acá se espera un poco más
+const COMMAND_RESULT_TIMEOUT_MS = 5000;
+
 function setBroadcastFn(fn) {
     broadcastToBrowsers = fn;
 }
@@ -35,7 +47,38 @@ function attachBridge(ws) {
     ws.on("close", () => {
         if (bridgeSocket === ws) {
             bridgeSocket = null;
+            liberarOrden({ ok: false, reason: "El agente-puente se desconectó" });
             broadcastRelayStatus();
+        }
+    });
+}
+
+function liberarOrden(resultado) {
+    if (!ordenEnCurso) return;
+    clearTimeout(ordenEnCurso.timer);
+    const { resolve } = ordenEnCurso;
+    ordenEnCurso = null;
+    resolve(resultado);
+}
+
+// Envía el comando al bridge-agent y espera su relay_command_result.
+// Siempre resuelve: { ok, reason?, timeout? }. `ok:false` sin `reason` es un NACK del ESP32.
+function enviarOrden(command) {
+    return new Promise((resolve) => {
+        const id = crypto.randomUUID();
+        ordenEnCurso = {
+            id,
+            resolve,
+            timer: setTimeout(
+                () => liberarOrden({ ok: false, reason: "El agente-puente no respondió", timeout: true }),
+                COMMAND_RESULT_TIMEOUT_MS
+            )
+        };
+        try {
+            bridgeSocket.send(JSON.stringify({ type: "relay_command", id, command }));
+        } catch (error) {
+            console.error("[relay.controller] Error al enviar comando al bridge:", error);
+            liberarOrden({ ok: false, reason: "Error al enviar el comando al agente-puente" });
         }
     });
 }
@@ -80,6 +123,15 @@ function handleBridgeMessage(raw) {
     } else if (msg.type === "esp_status") {
         esp32Connected = !!msg.connected;
         broadcastRelayStatus();
+    } else if (msg.type === "relay_command_result") {
+        if (!ordenEnCurso || msg.id !== ordenEnCurso.id) {
+            console.warn("[relay.controller] relay_command_result sin orden pendiente o de otra orden, se ignora:", msg.id);
+            return;
+        }
+        // El ACK/NACK trae el estado real de los relés: se aplica siempre, así un NACK
+        // también resincroniza el caché si estaba desfasado
+        if (msg.relay1 !== undefined) updateStateFromEsp32(msg);
+        liberarOrden({ ok: msg.ok === true, reason: msg.reason });
     }
 }
 
@@ -159,6 +211,9 @@ async function registrarHistorial(relayNum, accion, faultDetectado = false) {
 function scheduleFaultCheck(relayNum) {
     if (faultTimer) clearTimeout(faultTimer);
     faultWindowEndsAt = Date.now() + FAULT_DELAY_MS;
+    // Los navegadores se enteran de la ventana ya, sin esperar el próximo relay_status del ESP32
+    // (con el ACK, el estado puede haber llegado antes de que se arme esta ventana)
+    broadcastRelayStatus();
     faultTimer = setTimeout(async () => {
         faultTimer = null;
         faultWindowEndsAt = null;
@@ -177,38 +232,58 @@ async function handleCommand(req, res) {
         return res.status(400).json({ status: "error", message: "relayNum (1-3) y action ('relay_on'|'relay_off') son requeridos" });
     }
 
-    for (const check of [checkEmergencyManeuver, checkDisconnectionManeuver, checkCommissioningManeuver, checkFaultLock]) {
-        const result = check(num, action);
-        if (!result.ok) {
-            return res.status(409).json({ status: "error", message: result.message });
-        }
+    // Una sola orden a la vez para todas las cuentas: se rechaza (no se encola) y se toma
+    // ANTES de validar, para que las reglas corran contra el estado ya actualizado
+    if (ocupado) {
+        return res.status(409).json({ status: "error", message: "Hay otra orden en curso, esperá unos segundos" });
     }
-
-    if (!isBridgeConnected()) {
-        return res.status(503).json({ status: "error", message: "El agente-puente no está conectado, no se puede alcanzar el ESP32" });
-    }
-    if (!esp32Connected) {
-        return res.status(503).json({ status: "error", message: "El ESP32 de relés no está conectado" });
-    }
-
-    const wasRelay3On = relayStates[3] === "on";
-    const command = action === "relay_on" ? `relay_on${num}` : `relay_off${num}`;
+    ocupado = true;
 
     try {
-        bridgeSocket.send(JSON.stringify({ type: "relay_command", command }));
-    } catch (error) {
-        console.error("[relay.controller] Error al enviar comando al bridge:", error);
-        return res.status(500).json({ status: "error", message: "Error al enviar el comando al agente-puente" });
+        for (const check of [checkEmergencyManeuver, checkDisconnectionManeuver, checkCommissioningManeuver, checkFaultLock]) {
+            const result = check(num, action);
+            if (!result.ok) {
+                return res.status(409).json({ status: "error", message: result.message });
+            }
+        }
+
+        if (!isBridgeConnected()) {
+            return res.status(503).json({ status: "error", message: "El agente-puente no está conectado, no se puede alcanzar el ESP32" });
+        }
+        if (!esp32Connected) {
+            return res.status(503).json({ status: "error", message: "El ESP32 de relés no está conectado" });
+        }
+
+        // Se lee antes de enviar: el resultado del ESP32 actualiza relayStates[3]
+        const wasRelay3On = relayStates[3] === "on";
+        const command = action === "relay_on" ? `relay_on${num}` : `relay_off${num}`;
+
+        const resultado = await enviarOrden(command);
+
+        if (!resultado.ok) {
+            // ok:false sin `reason` = NACK del ESP32 (rechazó la orden); con `reason` = falla de transporte
+            console.warn(`[relay.controller] ${command} no se aplicó: ${resultado.reason || "NACK del ESP32"}`);
+            if (resultado.timeout) {
+                return res.status(504).json({ status: "error", message: "El agente-puente no respondió, no se pudo confirmar la orden" });
+            }
+            if (resultado.reason) {
+                return res.status(502).json({ status: "error", message: `No se pudo aplicar la orden: ${resultado.reason}` });
+            }
+            return res.status(409).json({ status: "error", message: "El ESP32 rechazó la orden (operación no permitida con el estado actual)" });
+        }
+
+        // Recién con el ACK del ESP32 la maniobra cuenta: historial, contador y ventana de Fault
+        registrarManiobra();
+        await registrarHistorial(num, action === "relay_on" ? "encendido" : "apagado");
+
+        if (num === 3 && action === "relay_on" && !wasRelay3On) {
+            scheduleFaultCheck(num);
+        }
+
+        return res.json({ status: "ok", relayNum: num, action });
+    } finally {
+        ocupado = false;
     }
-
-    registrarManiobra();
-    await registrarHistorial(num, action === "relay_on" ? "encendido" : "apagado");
-
-    if (num === 3 && action === "relay_on" && !wasRelay3On) {
-        scheduleFaultCheck(num);
-    }
-
-    return res.json({ status: "ok", relayNum: num, action });
 }
 
 const RESET_GAP_MS = 1500; // separación entre comandos al ESP32
@@ -225,23 +300,29 @@ async function resetAllRelaysOn() {
 
     if (!isBridgeConnected()) return { ok: false, motivo: "agente-puente no conectado" };
     if (!esp32Connected) return { ok: false, motivo: "ESP32 de relés no conectado" };
+    if (ocupado) return { ok: false, motivo: "hay otra orden en curso" };
+    ocupado = true;
 
-    const wasRelay3On = relayStates[3] === "on";
-    const enviados = [];
-    for (const num of apagados) {
-        try {
-            bridgeSocket.send(JSON.stringify({ type: "relay_command", command: `relay_on${num}` }));
-        } catch (error) {
-            console.error("[relay.controller] Error en reset al enviar relay_on" + num + ":", error);
-            return { ok: false, motivo: `error al enviar relay_on${num}` };
+    try {
+        const wasRelay3On = relayStates[3] === "on";
+        const enviados = [];
+        for (const num of apagados) {
+            const resultado = await enviarOrden(`relay_on${num}`);
+            if (!resultado.ok) {
+                const motivo = resultado.reason || "rechazada por el ESP32";
+                console.error(`[relay.controller] Reset: relay_on${num} no se aplicó (${motivo})`);
+                return { ok: false, motivo: `relay_on${num} no se aplicó (${motivo})` };
+            }
+            enviados.push(num);
+            registrarManiobra();
+            await registrarHistorial(num, "encendido");
+            if (num === 3 && !wasRelay3On) scheduleFaultCheck(num);
+            await new Promise(resolve => setTimeout(resolve, RESET_GAP_MS));
         }
-        enviados.push(num);
-        registrarManiobra();
-        await registrarHistorial(num, "encendido");
-        if (num === 3 && !wasRelay3On) scheduleFaultCheck(num);
-        await new Promise(resolve => setTimeout(resolve, RESET_GAP_MS));
+        return { ok: true, enviados };
+    } finally {
+        ocupado = false;
     }
-    return { ok: true, enviados };
 }
 
 export {
