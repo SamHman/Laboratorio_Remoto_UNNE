@@ -77,13 +77,13 @@ async function sheetsApiGet(accessToken, url) {
     return data;
 }
 
-async function resolveSheetTitle(accessToken, spreadsheetId, gid) {
+async function resolveSheetTitle(accessToken, spreadsheetId) {
     if (cachedSheetTitle) return cachedSheetTitle;
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`;
     const data = await sheetsApiGet(accessToken, url);
-    const sheet = (data.sheets || []).find((s) => String(s.properties.sheetId) === String(gid));
+    const sheet = (data.sheets || [])[0];
     if (!sheet) {
-        throw new Error(`No se encontró ninguna hoja con gid=${gid} en el spreadsheet ${spreadsheetId}`);
+        throw new Error(`El spreadsheet ${spreadsheetId} no tiene hojas`);
     }
     cachedSheetTitle = sheet.properties.title;
     return cachedSheetTitle;
@@ -138,13 +138,16 @@ function parseDecimalComa(raw) {
 // HORA_FIN_VALIDA) - 05:40 inclusive, 19:00 excluido. No es un filtro de consulta,
 // es un filtro de INGESTA: la fila descartada nunca llega a hacer INSERT, así que
 // un export de 19:00 a 5:00 da vacío sin tener que tocar el Sheet.
-const HORA_INICIO_VALIDA = '05:40:00';
+const HORA_INICIO_VALIDA = '06:00:00';
 const HORA_FIN_VALIDA = '19:00:00';
 
 function horaFueraDeVentana(fecha_hora) {
     const hora = fecha_hora.slice(11); // "YYYY-MM-DD HH:MM:SS" -> "HH:MM:SS"
     return hora < HORA_INICIO_VALIDA || hora >= HORA_FIN_VALIDA;
 }
+
+// Factor de calibración del piranómetro: multiplica el valor crudo de irradiancia (col C) antes de guardarlo.
+const K_IRRADIANCIA = 20.4112;
 
 const UPSERT_CHUNK_SIZE = 500;
 
@@ -162,9 +165,9 @@ async function upsertRows(rows) {
     }
 }
 
-async function syncOnce(serviceAccountKey, spreadsheetId, gid) {
+async function syncOnce(serviceAccountKey, spreadsheetId) {
     const accessToken = await getAccessToken(serviceAccountKey);
-    const sheetTitle = await resolveSheetTitle(accessToken, spreadsheetId, gid);
+    const sheetTitle = await resolveSheetTitle(accessToken, spreadsheetId);
     const rows = await fetchSheetRows(accessToken, spreadsheetId, sheetTitle);
     if (rows.length === 0) return;
 
@@ -190,7 +193,12 @@ async function syncOnce(serviceAccountKey, spreadsheetId, gid) {
             descartadasPorHorario++;
             continue;
         }
-        toUpsert.push([fecha_hora, parseDecimalComa(rawIrr), parseDecimalComa(rawTemp)]);
+        let irr = parseDecimalComa(rawIrr);
+        if (irr !== null) {
+            if (irr < 0) irr = 0;
+            irr = Math.round(irr * K_IRRADIANCIA * 10000) / 10000;
+        }
+        toUpsert.push([fecha_hora, irr, parseDecimalComa(rawTemp)]);
     }
 
     if (toUpsert.length > 0) {
@@ -206,7 +214,6 @@ async function syncOnce(serviceAccountKey, spreadsheetId, gid) {
 
 export function startIrradianciaSync() {
     const spreadsheetId = process.env.GOOGLE_SHEETS_IRRADIANCIA_ID;
-    const gid = process.env.GOOGLE_SHEETS_IRRADIANCIA_GID || '0';
     const intervalMs = Number(process.env.IRRADIANCIA_POLL_INTERVAL_MS) || 60000;
     const serviceAccountKey = loadServiceAccountKey();
 
@@ -216,7 +223,7 @@ export function startIrradianciaSync() {
     }
 
     const tick = () => {
-        syncOnce(serviceAccountKey, spreadsheetId, gid).catch((err) => {
+        syncOnce(serviceAccountKey, spreadsheetId).catch((err) => {
             console.error('[irradianciaSync] Error en la sincronización:', err.message);
         });
     };

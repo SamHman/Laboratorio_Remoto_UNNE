@@ -156,7 +156,6 @@ function enviarExcel(array $filas, string $prefijoArchivo): void
     $encabezados = array_merge(['fecha_hora'], COLUMNAS_INVERSOR, ['temperatura', 'irradiancia']);
     $spreadsheet = new Spreadsheet();
 
-    // null = celda vacía (inversor sin registro dentro de la tolerancia)
     foreach (array_chunk($filas, FILAS_POR_HOJA) as $i => $bloque) {
         $hoja = $i === 0 ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
         $hoja->setTitle('Datos ' . ($i + 1));
@@ -164,9 +163,9 @@ function enviarExcel(array $filas, string $prefijoArchivo): void
         $matriz = [$encabezados];
         foreach ($bloque as $fila) {
             $matriz[] = array_map(
-                fn($columna) => ($columna === 'fecha_hora' || $fila[$columna] === null)
+                fn($columna) => $columna === 'fecha_hora'
                     ? $fila[$columna]
-                    : round((float) $fila[$columna], 2),
+                    : ($fila[$columna] === null ? 0 : round((float) $fila[$columna], 2)),
                 $encabezados
             );
         }
