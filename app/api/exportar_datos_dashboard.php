@@ -169,7 +169,7 @@ function enviarExcel(array $filas, string $prefijoArchivo): void
                 $encabezados
             );
         }
-        $hoja->fromArray($matriz, null, 'A1');
+        $hoja->fromArray($matriz, null, 'A1', true);
         unset($matriz);
     }
     unset($filas);
