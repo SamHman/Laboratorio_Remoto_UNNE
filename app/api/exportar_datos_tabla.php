@@ -99,13 +99,14 @@ function enviarExcel(array $filas, array $config): void
         $matriz = [$encabezados];
         foreach ($bloque as $fila) {
             $matriz[] = array_map(
-                fn($columna) => ($columna === 'fecha_hora' || $fila[$columna] === null)
+                fn($columna) => $columna === 'fecha_hora'
                     ? $fila[$columna]
-                    : round((float) $fila[$columna], 2),
+                    : ($fila[$columna] === null ? 0 : round((float) $fila[$columna], 2)),
                 $encabezados
             );
         }
-        $hoja->fromArray($matriz, null, 'A1');
+        // Estricto: con == PhpSpreadsheet trata 0 como null y deja la celda vacía
+        $hoja->fromArray($matriz, null, 'A1', true);
         unset($matriz);
     }
     unset($filas);
