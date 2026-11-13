@@ -23,7 +23,7 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 let cachedToken = null; // { accessToken, expiresAt }
-let cachedSheetTitle = null;
+let lastSheetTitle = null; // solo para loguear cuando cambia la pestaña leída
 
 function loadServiceAccountKey() {
     const configuredPath = process.env.GOOGLE_SHEETS_KEY_FILE;
@@ -77,16 +77,26 @@ async function sheetsApiGet(accessToken, url) {
     return data;
 }
 
+// Se lee siempre la PRIMERA pestaña por posición (aunque esté oculta), sin importar
+// su nombre: es el mismo criterio que usa el Apps Script que recibe los datos del
+// ESP32 (`getSheets()[0]`). Se resuelve en cada ciclo, sin cachear el nombre, para
+// que reordenar/renombrar/borrar pestañas en el Sheet se refleje en el ciclo
+// siguiente sin reiniciar el contenedor (antes el nombre quedaba fijo hasta reiniciar).
 async function resolveSheetTitle(accessToken, spreadsheetId) {
-    if (cachedSheetTitle) return cachedSheetTitle;
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`;
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties(title,index)`;
     const data = await sheetsApiGet(accessToken, url);
-    const sheet = (data.sheets || [])[0];
-    if (!sheet) {
+    const sheets = (data.sheets || [])
+        .map((s) => s.properties)
+        .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+    if (sheets.length === 0) {
         throw new Error(`El spreadsheet ${spreadsheetId} no tiene hojas`);
     }
-    cachedSheetTitle = sheet.properties.title;
-    return cachedSheetTitle;
+    const title = sheets[0].title;
+    if (title !== lastSheetTitle) {
+        console.log(`[irradianciaSync] Leyendo la primera pestaña del Sheet: "${title}"`);
+        lastSheetTitle = title;
+    }
+    return title;
 }
 
 // Columnas del Sheet que se leen (índice base 0 dentro de cada fila): A = fecha/hora,
@@ -98,7 +108,9 @@ const COL_TEMPERATURA = 5;
 async function fetchSheetRows(accessToken, spreadsheetId, sheetTitle) {
     // Sin fila de encabezado: la fila 1 ya es el primer dato registrado.
     // El rango llega hasta F para incluir la columna de temperatura.
-    const range = `${sheetTitle}!A1:F`;
+    // Nombre entre comillas simples (y comillas internas duplicadas): notación A1
+    // necesaria si la pestaña tiene espacios o caracteres especiales, ej. 'Hoja 2'
+    const range = `'${sheetTitle.replace(/'/g, "''")}'!A1:F`;
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
     const data = await sheetsApiGet(accessToken, url);
     return data.values || [];
@@ -135,7 +147,7 @@ function parseDecimalComa(raw) {
 
 // El DTU a veces sigue mandando lecturas fantasma de noche (sin sol, sin sentido
 // guardarlas). Regla fija: solo se guarda lo que cae en [HORA_INICIO_VALIDA,
-// HORA_FIN_VALIDA) - 05:40 inclusive, 19:00 excluido. No es un filtro de consulta,
+// HORA_FIN_VALIDA) - 06:00 inclusive, 19:00 excluido (misma ventana que el Apps Script). No es un filtro de consulta,
 // es un filtro de INGESTA: la fila descartada nunca llega a hacer INSERT, así que
 // un export de 19:00 a 5:00 da vacío sin tener que tocar el Sheet.
 const HORA_INICIO_VALIDA = '06:00:00';
