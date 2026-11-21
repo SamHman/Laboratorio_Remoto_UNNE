@@ -10,12 +10,19 @@ import db from '../db.js';
 // account a mano con jsonwebtoken (ya es dependencia del proyecto) y llama
 // directo a la API REST de Sheets v4 con fetch (nativo desde Node 18+).
 //
-// Diseño sin estado local: en cada ciclo se pregunta a la propia tabla
-// (MAX(fecha_hora)) hasta dónde ya se sincronizó, y se descartan las filas del
-// Sheet que no sean más nuevas. Sobrevive a reinicios/redeploys sin archivo de
-// estado aparte, a costa de releer todo el rango A1:F en cada ciclo — aceptable
-// mientras el Sheet no crezca a decenas de miles de filas; si eso pasa, conviene
-// paginar por número de fila en vez de por fecha.
+// Lectura incremental (2026-11-20, detalle en GoogleSheets20_11.md):
+// - El PRIMER ciclo después de arrancar node descarga y hace upsert de todo el Sheet
+//   (completa cualquier hueco: base nueva, node caído un tiempo, datos viejos
+//   corregidos a mano en el Sheet -> reiniciar el contenedor).
+// - Los ciclos siguientes NO descargan la hoja entera: piden solo desde la última fila
+//   conocida menos un margen (rango A{fila}:F, por número de fila; la API de valores
+//   no sabe filtrar por fecha, pero sí por fila). Así la descarga es siempre de unas
+//   pocas miles de filas, sin importar cuánto crezca la hoja.
+// - De lo descargado, solo se hace upsert de las filas de los últimos
+//   IRRADIANCIA_SYNC_DIAS días (hora Argentina).
+// - Vuelve a leer completo si cambió la primera pestaña (se creó/reordenó una) o si la
+//   hoja se achicó (filas borradas o archivadas: los números de fila ya no sirven).
+// - IRRADIANCIA_SYNC_DIAS=0 vuelve al comportamiento original: todo el Sheet en cada ciclo.
 
 const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -105,12 +112,15 @@ const COL_FECHA = 0;
 const COL_IRRADIANCIA = 2;
 const COL_TEMPERATURA = 5;
 
-async function fetchSheetRows(accessToken, spreadsheetId, sheetTitle) {
+// filaInicio: número de fila del Sheet (base 1) desde la que se lee hasta el final.
+// La API devuelve las filas vacías intermedias como [] y corta solo las del final,
+// así que la fila de la posición i del resultado es siempre filaInicio + i.
+async function fetchSheetRows(accessToken, spreadsheetId, sheetTitle, filaInicio = 1) {
     // Sin fila de encabezado: la fila 1 ya es el primer dato registrado.
     // El rango llega hasta F para incluir la columna de temperatura.
     // Nombre entre comillas simples (y comillas internas duplicadas): notación A1
     // necesaria si la pestaña tiene espacios o caracteres especiales, ej. 'Hoja 2'
-    const range = `'${sheetTitle.replace(/'/g, "''")}'!A1:F`;
+    const range = `'${sheetTitle.replace(/'/g, "''")}'!A${filaInicio}:F`;
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
     const data = await sheetsApiGet(accessToken, url);
     return data.values || [];
@@ -163,6 +173,31 @@ const K_IRRADIANCIA = 20.4112;
 
 const UPSERT_CHUNK_SIZE = 500;
 
+// Fecha de corte "YYYY-MM-DD 00:00:00" en hora Argentina (UTC-3, sin horario de
+// verano), N días atrás contando hoy: N=2 -> desde ayer 00:00. Mismo formato que
+// devuelve parseFechaHora, así que se compara como string.
+const formateadorFechaAR = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
+function fechaCorte(dias) {
+    const desde = new Date(Date.now() - (dias - 1) * 24 * 60 * 60 * 1000);
+    return `${formateadorFechaAR.format(desde)} 00:00:00`;
+}
+
+let primerCicloHecho = false;
+// Última lectura exitosa: { pestana, ultimaFila } (ultimaFila = número de fila del
+// Sheet de la última fila con datos). null hasta el primer ciclo completo.
+let ultimaLectura = null;
+
+// Filas que se vuelven a pedir hacia atrás desde la última conocida: 1440 por día
+// (1 por minuto las 24 h, peor caso aunque hoy el datalogger solo escriba 06-19 h).
+// Cubre la ventana de IRRADIANCIA_SYNC_DIAS y absorbe filas insertadas a mano en el medio.
+function margenFilas(diasVentana) {
+    return Math.max(1, diasVentana) * 1440;
+}
+
 async function upsertRows(rows) {
     for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
         const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE);
@@ -177,20 +212,42 @@ async function upsertRows(rows) {
     }
 }
 
-async function syncOnce(serviceAccountKey, spreadsheetId) {
+async function syncOnce(serviceAccountKey, spreadsheetId, diasVentana) {
     const accessToken = await getAccessToken(serviceAccountKey);
     const sheetTitle = await resolveSheetTitle(accessToken, spreadsheetId);
-    const rows = await fetchSheetRows(accessToken, spreadsheetId, sheetTitle);
-    if (rows.length === 0) return;
 
-    // Se resincroniza el rango completo en cada ciclo en vez de filtrar por
-    // MAX(fecha_hora): esa comparación se probó frágil apenas la tabla tiene
-    // filas con fechas que no vienen del propio Sheet (ej. datos dummy/de
-    // prueba con timestamps más "nuevos" que el historial real), porque
-    // bloqueaba silenciosamente la sincronización entera. El upsert por
-    // fecha_hora ya es idempotente, así que reenviar todo es seguro; el
-    // costo (unas pocas centenas de filas por ciclo, por ahora) es aceptable
-    // mientras el Sheet no crezca a decenas de miles de filas.
+    const pestanaCambio = ultimaLectura !== null && ultimaLectura.pestana !== sheetTitle;
+    if (pestanaCambio) {
+        console.log(`[irradianciaSync] Cambió la primera pestaña ("${ultimaLectura.pestana}" -> "${sheetTitle}"): lectura completa`);
+    }
+    let completo = !primerCicloHecho || diasVentana <= 0 || ultimaLectura === null || pestanaCambio;
+    let filaInicio = completo ? 1 : Math.max(1, ultimaLectura.ultimaFila - margenFilas(diasVentana) + 1);
+    let rows = await fetchSheetRows(accessToken, spreadsheetId, sheetTitle, filaInicio);
+
+    // Si lo leído no llega hasta la última fila que ya conocíamos, la hoja se achicó
+    // (se borraron o archivaron filas) y los números de fila se corrieron: releer completo.
+    if (filaInicio > 1 && filaInicio + rows.length - 1 < ultimaLectura.ultimaFila) {
+        console.log(`[irradianciaSync] La hoja tiene menos filas que antes (última conocida: ${ultimaLectura.ultimaFila}): lectura completa`);
+        completo = true;
+        filaInicio = 1;
+        rows = await fetchSheetRows(accessToken, spreadsheetId, sheetTitle, 1);
+    }
+
+    const ultimaFila = filaInicio + rows.length - 1;
+    if (rows.length === 0) {
+        ultimaLectura = { pestana: sheetTitle, ultimaFila: 0 };
+        primerCicloHecho = true;
+        return;
+    }
+
+    // De lo descargado, solo se hace upsert desde "hoy menos N días". El corte es por
+    // fecha y NO por MAX(fecha_hora) de la tabla: esa comparación se probó frágil
+    // apenas la tabla tiene filas con fechas que no vienen del propio Sheet (ej. datos
+    // dummy con timestamps más "nuevos" que el historial real), porque bloqueaba
+    // silenciosamente la sincronización entera. El upsert por fecha_hora es
+    // idempotente, así que solapar días es seguro.
+    const corte = completo ? null : fechaCorte(diasVentana);
+
     const toUpsert = [];
     let descartadasPorHorario = 0;
     for (const row of rows) {
@@ -201,6 +258,7 @@ async function syncOnce(serviceAccountKey, spreadsheetId) {
         const rawTemp = row[COL_TEMPERATURA];
         const fecha_hora = parseFechaHora(rawFecha || '');
         if (!fecha_hora) continue;
+        if (corte && fecha_hora < corte) continue;
         if (horaFueraDeVentana(fecha_hora)) {
             descartadasPorHorario++;
             continue;
@@ -217,16 +275,27 @@ async function syncOnce(serviceAccountKey, spreadsheetId) {
         await upsertRows(toUpsert);
         // Última fila sincronizada: permite comprobar en el log qué columnas se están leyendo
         const [uFecha, uIrr, uTemp] = toUpsert[toUpsert.length - 1];
-        console.log(`[irradianciaSync] ${toUpsert.length} fila(s) sincronizada(s) desde el Sheet. Última: ${uFecha} | irradiancia (col C) = ${uIrr} | temperatura (col F) = ${uTemp}`);
+        const alcance = completo
+            ? `Sheet completo, ${rows.length} filas leídas`
+            : `filas ${filaInicio}-${ultimaFila} leídas, upsert desde ${corte}`;
+        console.log(`[irradianciaSync] ${toUpsert.length} fila(s) sincronizada(s) (${alcance}). Última: ${uFecha} | irradiancia (col C) = ${uIrr} | temperatura (col F) = ${uTemp}`);
     }
     if (descartadasPorHorario > 0) {
         console.log(`[irradianciaSync] ${descartadasPorHorario} fila(s) descartada(s) por estar fuera del horario ${HORA_INICIO_VALIDA}-${HORA_FIN_VALIDA}`);
     }
+    // Recién después de un ciclo exitoso: si el primero falla (Google caído,
+    // credencial mal), el próximo vuelve a intentar el Sheet completo, y si falla
+    // un upsert incremental, el siguiente vuelve a pedir desde la misma fila.
+    ultimaLectura = { pestana: sheetTitle, ultimaFila };
+    primerCicloHecho = true;
 }
 
 export function startIrradianciaSync() {
     const spreadsheetId = process.env.GOOGLE_SHEETS_IRRADIANCIA_ID;
     const intervalMs = Number(process.env.IRRADIANCIA_POLL_INTERVAL_MS) || 60000;
+    // Sin definir o inválida -> 2 días. 0 (o negativo) -> Sheet completo en cada ciclo.
+    const diasRaw = (process.env.IRRADIANCIA_SYNC_DIAS ?? '').trim();
+    const diasVentana = diasRaw !== '' && Number.isFinite(Number(diasRaw)) ? Math.floor(Number(diasRaw)) : 2;
     const serviceAccountKey = loadServiceAccountKey();
 
     if (!serviceAccountKey || !spreadsheetId) {
@@ -234,13 +303,26 @@ export function startIrradianciaSync() {
         return;
     }
 
+    // Un ciclo a la vez: setInterval no espera a que termine el anterior. Si uno tarda
+    // más que el intervalo (Google lento, lectura completa de una hoja grande), el tick
+    // siguiente se saltea en vez de encimarse y acumular descargas en memoria.
+    let enCurso = false;
     const tick = () => {
-        syncOnce(serviceAccountKey, spreadsheetId).catch((err) => {
-            console.error('[irradianciaSync] Error en la sincronización:', err.message);
-        });
+        if (enCurso) {
+            console.log('[irradianciaSync] El ciclo anterior sigue en curso, se saltea este tick');
+            return;
+        }
+        enCurso = true;
+        syncOnce(serviceAccountKey, spreadsheetId, diasVentana)
+            .catch((err) => {
+                console.error('[irradianciaSync] Error en la sincronización:', err.message);
+            })
+            .finally(() => { enCurso = false; });
     };
 
-    console.log(`[irradianciaSync] Iniciando sincronización cada ${intervalMs}ms`);
+    console.log(diasVentana > 0
+        ? `[irradianciaSync] Iniciando sincronización cada ${intervalMs}ms (primer ciclo: Sheet completo; después: últimas ${margenFilas(diasVentana)} filas, upsert de los últimos ${diasVentana} día(s))`
+        : `[irradianciaSync] Iniciando sincronización cada ${intervalMs}ms (Sheet completo en cada ciclo)`);
     tick();
     setInterval(tick, intervalMs);
 }

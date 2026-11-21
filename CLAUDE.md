@@ -129,7 +129,35 @@ El historial de maniobras queda en la tabla `historial_relay`.
 **Advertencia de escalado a cluster** (si algún día se corre `node` en más
 de una instancia): `bridgeSocket` y `relayStates` viven en memoria de un solo
 proceso — con varias réplicas, solo una tendría al bridge-agent conectado.
-Detalle completo en `NOTAS_CLUSTER.md` (sin trackear, notas del usuario).
+Detalle completo en `NOTAS_CLUSTER.md` (notas del usuario).
+
+---
+
+## Autenticación de los PHP — nginx `auth_request` (2026-11-20)
+
+Antes, nginx mandaba `/app/api/` **directo a PHP** y ningún PHP validaba la
+sesión: cualquiera sin login podía leer todos los datos y pedir exportaciones
+de años (hasta 4 GB de RAM y 30 min cada una). Ahora:
+
+1. `nginx/conf.d/labvirtualunne.conf`: `location /app/api/` tiene
+   `auth_request /_auth_sesion;`. Antes de reenviar a PHP, nginx hace un
+   subrequest interno (`location = /_auth_sesion`, `internal`, sin cuerpo, con
+   la cookie original) a `node` → `GET /api/auth-check`.
+2. `app/middlewares/authorization.js: verificarSesionApi` contesta `204` si la
+   cookie `jwt` es válida, `401` si no. Sin logs (se llama en cada request a
+   PHP). Con `401`, nginx corta y PHP nunca se ejecuta.
+3. `app/public/funciones/exportar.js`: un `401` muestra "Tu sesión venció" y
+   redirige a `/login` (antes caía en el mensaje de "límite excedido").
+
+**Los PHP no tienen ningún código de autenticación propio, a propósito**: Node
+es el único que decide si hay sesión. Para la migración a PLAT-LR
+(`Plan_Integracion/PLAN_INTEGRACION_PLATLR.md`) solo cambia el contenido de
+`verificarSesionApi`; nginx y los PHP quedan igual. Ojo: ese plan pone el gate
+en un middleware de Node, que **no** cubre `/app/api/` por sí solo — el gate de
+PHP es este `auth_request`.
+
+En XAMPP local no hay nginx: ahí los PHP siguen sin control (solo desarrollo).
+`/api/auth-check` es público (devuelve 204/401, no expone nada).
 
 ---
 
@@ -151,6 +179,19 @@ mandando datos bien). Se arranca/detiene con `iniciar_lectura_inversor.bat` /
 `detener_lectura_inversor.bat` (corren el `.py` con el Python del sistema; el
 `.exe` de `dist/` está desactualizado).
 
+**Respaldo / recuperación desde los CSV (2026-11-20):** `subir_csv_a_vps.bat`
+(junto a `goodwe_reader.py`, con `subir_csv_a_vps.py`) sube todas las filas de
+`REGISTRO_MENSUAL/GW5000_DT_*.csv` a la base de la VPS por el **mismo endpoint**
+que usa el lector (`POST /api/telemetry/inversor`, upsert por `fecha_hora`:
+correrlo varias veces no duplica nada; no necesita credenciales de MySQL).
+Toma URL y API key importando `goodwe_reader` (al migrar de VPS se cambian en
+un solo lugar). Primero cuenta las filas (`--probar`) y pide confirmación;
+acepta `--desde`/`--hasta YYYY-MM-DD`. 8 envíos en paralelo; las filas que
+fallan quedan en `SUBIDA_FALLIDA/` para reintentarlas con `--carpeta`. Saltea
+los CSV con encabezado viejo (`_encabezado_viejo_`). Cubre solo `datos_inversor`:
+`datos_irradiancia` se recupera del Sheet (sync completo al arrancar `node`),
+y `usuarios`/`historial_relay` **no tienen respaldo**.
+
 **Datos instantáneos** (al maniobrar un relé): `relay.controller.js` llama a
 `registrarManiobra()` (`app/services/maniobras.js`, marca en memoria). En cada
 ciclo GoodWeReader consulta `GET /api/telemetry/inversor/evento-relay`; si la
@@ -165,10 +206,37 @@ promedio del minuto. El Excel nunca lleva instantáneos.
 `IRRADIANCIA_POLL_INTERVAL_MS` lee el Sheet "DataLogger ESP32 - UNNE"
 (columna A fecha, B irradiancia, C temperatura; sin encabezado; mezcla
 formatos `YYYY-MM-DD` y `DD/MM/YYYY`) con una cuenta de servicio de solo
-lectura y hace upsert de todo el rango en `datos_irradiancia`. Credencial en
+lectura y hace upsert en `datos_irradiancia`. Credencial en
 `credentials/` (gitignorado, montado como volumen; copiarlo a mano a cada
 máquina). En `datos_irradiancia` de la VPS hay 20 filas dummy previas
-(2026-09-24 13:00–13:19) que no vienen del Sheet — sin decidir si se borran.
+(2026-09-24 13:00–13:19) que no vienen del Sheet — el usuario decidió no
+tocarlas (2026-11-20).
+
+**Ventana de sincronización (2026-11-20).** Antes hacía upsert de *todo* el
+Sheet cada minuto, y como el upsert pone `fecha_importacion = NOW()`, MySQL
+reescribía de verdad todas las filas cada minuto (binlog de GB por día). Ahora:
+- El **primer ciclo tras arrancar `node`** hace upsert del Sheet completo
+  (recupera huecos: base nueva, `node` caído, datos viejos corregidos a mano
+  en el Sheet → `docker restart labvirtualunne_node`). Si falla, el siguiente
+  ciclo lo reintenta completo.
+- Los ciclos siguientes solo hacen upsert de las filas desde
+  `IRRADIANCIA_SYNC_DIAS` días atrás (hora Argentina, default `2` = desde ayer
+  00:00). `0` = Sheet completo en cada ciclo (comportamiento anterior). Variable
+  en `docker-compose.yml` y `.env_EJEMPLO`.
+- El corte es por "hoy menos N días", **no** por `MAX(fecha_hora)` de la tabla
+  (eso se probó frágil con filas dummy más "nuevas" que el historial).
+- **Lectura incremental (2026-11-20, mismo día):** ya no descarga la hoja
+  entera cada minuto. Recuerda el número de la última fila y pide solo
+  `A{última fila - IRRADIANCIA_SYNC_DIAS×1440}:F` (~2.880 filas). Relee completo
+  si cambia el nombre de la primera pestaña o si la hoja se achica (filas
+  borradas/archivadas). Un ciclo a la vez (si el anterior sigue, se saltea el
+  tick). Contexto completo, operación y prueba en `GoogleSheets20_11.md`.
+- Límite de Google: 10 M celdas por Sheet, contando las columnas vacías de la
+  grilla. Rotar a una pestaña nueva (puesta primera: la leen el sync y el Apps
+  Script, `getSheets()[0]`) no requiere tocar el Apps Script ni el código.
+- Sigue el `fecha_importacion = NOW()` en el upsert: las ~1.560 filas de la
+  ventana se reescriben cada minuto (~170 MB/día de binlog con la retención
+  default de 30 días de MySQL 8). Sacarlo del `UPDATE` lo llevaría a ~0.
 
 ### Exportación a Excel
 
@@ -203,6 +271,14 @@ para después).
 - El `.env` de la VPS está protegido por config de Apache (`Dockerfile.php`:
   `Options -Indexes` + `<Files ".env"> Require all denied`), no solo por
   permisos de archivo — no revertir esto.
+- `.md` desactualizados borrados (2026-11-20, `git rm`): `ANALISIS_PROYECTO.md`,
+  `RefactorizacionSCADA.md`, `LabVirtualUNNE_funcionamiento_previo.md`,
+  `INTEGRACION_SCRIPT_DTU.md` (describían estados ya superados). Siguen en el
+  historial de git. Quedan vigentes: este `CLAUDE.md`, `NOTAS_CLUSTER.md`,
+  `GoogleSheets20_11.md` y `Plan_Integracion/PLAN_INTEGRACION_PLATLR.md`.
+- Índice `idx_fecha_hora` de `datos_inversor` sacado de
+  `sql/init/02_datos_inversor.sql` (2026-11-20): redundante con el `UNIQUE` sobre
+  la misma columna. En una base existente: `ALTER TABLE datos_inversor DROP INDEX idx_fecha_hora;`
 
 ---
 
@@ -226,6 +302,7 @@ para después).
 ## Flujo de deploy a la VPS
 
 Pushear a GitHub **no** deploya solo. Pasos manuales en la VPS:
+<!-- Hay que modificar: IP, ruta y dominio de este bloque y de la tabla "Accesos" (y la intro, líneas 14-15) cuando se migre a la VPS nueva (pulido). -->
 ```bash
 ssh root@62.171.190.54   # clave SSH ya instalada, sin contraseña
 cd /root/linkgestion/labvirtualunne
@@ -258,7 +335,9 @@ repetir los pasos de arriba.
   hace falta — **ojo:** esa ruta no tiene ningún control de acceso, cualquiera
   puede registrarse.
 - `app/pages/admin/informacion.html` y `app/public/informacion.js` siguen
-  vacíos (pantalla planificada, nunca construida — ver `ANALISIS_PROYECTO.md`).
+  vacíos (pantalla planificada, nunca construida).
 - Limpiar los 3 endpoints legacy de `data.controller.js` (ver arriba).
-- Zona horaria: MySQL de la VPS corre en UTC: sin `--default-time-zone=-03:00`,
-  las columnas `fecha_importacion`/`creado_en` quedan 3h adelantadas.
+- Zona horaria: `docker-compose.yml` ya tiene `command: --default-time-zone=-03:00`
+  en `mysql` (2026-11-20). Falta deployarlo: hasta entonces la VPS corre en UTC y
+  `fecha_importacion`/`creado_en` se ven 3h adelantadas (las filas viejas se corrigen
+  solas al aplicarlo, porque TIMESTAMP se guarda en UTC y se convierte al leer).

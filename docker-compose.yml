@@ -3,6 +3,11 @@ services:
   mysql:
     image: mysql:8.0
     container_name: labvirtualunne_mysql
+    # Hora Argentina (UTC-3, sin horario de verano). Solo afecta a las columnas TIMESTAMP
+    # (fecha_importacion, creado_en) y a NOW(): sin esto quedaban 3 h adelantadas. Las
+    # DATETIME (fecha_hora) se guardan tal cual y no cambian. Ninguna consulta compara
+    # NOW() contra fecha_hora, así que filtros del dashboard y del Excel no se ven afectados.
+    command: --default-time-zone=-03:00
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -47,6 +52,7 @@ services:
       GOOGLE_SHEETS_IRRADIANCIA_ID: ${GOOGLE_SHEETS_IRRADIANCIA_ID}
       GOOGLE_SHEETS_IRRADIANCIA_GID: ${GOOGLE_SHEETS_IRRADIANCIA_GID:-0}
       IRRADIANCIA_POLL_INTERVAL_MS: ${IRRADIANCIA_POLL_INTERVAL_MS:-60000}
+      IRRADIANCIA_SYNC_DIAS: ${IRRADIANCIA_SYNC_DIAS:-2}
     volumes:
       - ./credentials:/app/credentials:ro,z
     expose:
@@ -90,6 +96,9 @@ services:
       - "80"
     ports:
       - "127.0.0.1:8154:80"
+    # Hay que modificar: la red prueba1_traefik-public y estas labels son del Traefik de la VPS
+    # de Contabo. En la VPS nueva (pulido): cambiar el dominio del Host(...) y adaptar o sacar
+    # todo este bloque según el proxy que tengan (Traefik con otro nombre de red, Caddy, nginx+certbot).
     networks:
       - backend
       - prueba1_traefik-public
@@ -108,5 +117,6 @@ volumes:
 
 networks:
   backend:
+  # Hay que modificar: red externa del Traefik de Contabo (ver comentario en el servicio nginx).
   prueba1_traefik-public:
     external: true

@@ -73,6 +73,10 @@ async function exportar(exportModal) {
         } else if (response.ok) {
             // 200 sin Excel: el PHP no encontró datos en el rango
             showNotification('No se disponen de datos para el rango de fechas seleccionado.', 'warning');
+        } else if (response.status === 401) {
+            // nginx cortó el pedido antes de llegar a PHP: la sesión venció (auth_request)
+            showNotification('Tu sesión venció. Volvé a iniciar sesión para exportar.', 'error');
+            setTimeout(() => { window.location.href = '/login'; }, 2500);
         } else {
             // 500/502/504: típicamente el rango es tan grande que se agotó la memoria o el tiempo del servidor
             const detalle = await response.text();

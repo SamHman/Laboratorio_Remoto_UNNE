@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS datos_inversor (
     HourTotal DECIMAL(10,3) NULL,
     origen VARCHAR(100) NOT NULL DEFAULT 'script-dtu',
     fecha_importacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_fecha_hora (fecha_hora),
+    -- Sin INDEX idx_fecha_hora aparte: el UNIQUE de abajo ya es un índice sobre
+    -- fecha_hora y sirve igual para búsquedas/ORDER BY (el otro era redundante).
     UNIQUE KEY uq_datos_inversor_fecha_hora (fecha_hora)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Datos de inversor solar DTU';

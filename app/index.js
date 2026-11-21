@@ -173,6 +173,8 @@ app.get("/SCADA", authorization.soloAdmin, (req, res) => res.sendFile(path.join(
 app.post("/api/login",authentication.login);
 app.post("/api/register",authentication.register);
 app.get("/api/whoami", authorization.soloAdmin, authentication.whoami);
+// Lo consulta nginx (auth_request) antes de dejar pasar cualquier request a los PHP de /app/api/
+app.get("/api/auth-check", authorization.verificarSesionApi);
 
 // Rutas para insertar datos
 app.post("/api/inversor", authorization.soloAdmin, dataController.insertInversorData);

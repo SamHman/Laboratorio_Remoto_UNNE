@@ -22,24 +22,36 @@ function soloPublico(req,res,next){
   return res.redirect("/SCADA")
 }
 
-function revisarCookie(req){
+// Gate de sesión para los PHP de /app/api/ (2026-11-20). nginx no deja pasar ningún
+// request a PHP sin antes preguntarle acá (directiva auth_request, ver
+// nginx/conf.d/labvirtualunne.conf): 204 = tiene sesión, pasa a PHP; 401 = nginx
+// corta y PHP nunca se ejecuta. Es el ÚNICO lugar que decide si hay sesión para
+// los PHP: cuando se migre a PLAT-LR (Plan_Integracion/PLAN_INTEGRACION_PLATLR.md) solo cambia
+// lo de adentro de esta función, nginx y los PHP quedan igual.
+// Sin logs: se llama en cada request a PHP (polling del dashboard cada 30 s).
+function verificarSesionApi(req, res) {
+  return revisarCookie(req, { silencioso: true }) ? res.sendStatus(204) : res.sendStatus(401);
+}
+
+function revisarCookie(req, { silencioso = false } = {}){
+  const log = silencioso ? () => {} : console.log;
   try{
     if (!req.headers.cookie) {
-      console.log("[revisarCookie] No hay cookies en la petición");
+      log("[revisarCookie] No hay cookies en la petición");
       return false;
     }
     const cookieJWT = req.headers.cookie.split("; ").find(cookie => cookie.startsWith("jwt="));
     if (!cookieJWT) {
-      console.log("[revisarCookie] No se encontró la cookie JWT");
+      log("[revisarCookie] No se encontró la cookie JWT");
       return false;
     }
     const token = cookieJWT.slice(4);
     const decodificada = jsonwebtoken.verify(token,process.env.JWT_SECRET);
-    console.log("Token decodificado:", decodificada);
+    log("Token decodificado:", decodificada);
     return true;
   }
   catch(e){
-    console.log("[revisarCookie] Error al verificar JWT:", e.message);
+    log("[revisarCookie] Error al verificar JWT:", e.message);
     return false;
   }
 }
@@ -53,5 +65,6 @@ function soloApiKey(req, res, next) {
 export const methods = {
   soloAdmin,
   soloPublico,
-  soloApiKey
+  soloApiKey,
+  verificarSesionApi
 }
