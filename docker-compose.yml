@@ -98,16 +98,17 @@ services:
       - "80"
     ports:
       - "127.0.0.1:8154:80"
-    # Hay que modificar: la red prueba1_traefik-public y estas labels son del Traefik de la VPS
-    # de Contabo. En la VPS nueva (pulido): cambiar el dominio del Host(...) y adaptar o sacar
-    # todo este bloque según el proxy que tengan (Traefik con otro nombre de red, Caddy, nginx+certbot).
+    # Hay que modificar: el dominio ya es el definitivo (labfv.unne.edu.ar, 2026-11-25), pero la
+    # red prueba1_traefik-public y los nombres websecure/letsencrypt son del Traefik de la VPS
+    # vieja (Contabo). En la VPS nueva: adaptarlos al Traefik que tenga, o sacar este bloque
+    # (labels + red externa) si usa nginx/Caddy en el host. Ver GUIA_DESPLIEGUE_ADMINISTRADOR.
     networks:
       - backend
       - prueba1_traefik-public
     labels:
       - traefik.enable=true
       - traefik.docker.network=prueba1_traefik-public
-      - traefik.http.routers.labvirtualunne.rule=Host(`labvirtualunne.linkgestion.com`)
+      - traefik.http.routers.labvirtualunne.rule=Host(`labfv.unne.edu.ar`)
       - traefik.http.routers.labvirtualunne.entrypoints=websecure
       - traefik.http.routers.labvirtualunne.tls.certresolver=letsencrypt
       - traefik.http.routers.labvirtualunne.service=labvirtualunne-nginx-svc
