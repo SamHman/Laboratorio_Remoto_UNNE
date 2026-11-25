@@ -6,8 +6,8 @@
 // sin promediar ni agrupar. A cada lectura se le asigna el registro de
 // datos_inversor más cercano en el tiempo, siempre que esté a no más de
 // TOLERANCIA_INVERSOR_SEGUNDOS; si no hay ninguno (GoodWeReader apagado, sin
-// red, etc.), las columnas del inversor quedan vacías en vez de mostrar datos
-// de otro momento como si fueran de esa hora.
+// red, etc.), las columnas del inversor no toman datos de otro momento como si
+// fueran de esa hora (salen en 0, igual que antes).
 //
 // Solo salen datos promediados (lo que GoodWeReader guarda cada minuto): los
 // datos instantáneos que se muestran al maniobrar relés nunca llegan a la base.
@@ -15,16 +15,13 @@
 // Si el rango no tiene lecturas, se entregan las más cercanas antes y después
 // del rango (archivo "datos_dashboard_cercanos_..."), para que el usuario no
 // se quede con las manos vacías al elegir un período sin mediciones.
+//
+// Desde 2026-11-25: por meses y en streaming (una hoja "AAAA-MM" por mes, RAM acotada
+// a un mes de datos). Detalle en app/includes/exportar_excel.php.
 
-require __DIR__ . '/../../vendor/autoload.php';
-
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+require_once __DIR__ . '/../includes/exportar_excel.php';
 
 const TOLERANCIA_INVERSOR_SEGUNDOS = 60;
-
-// Excel admite 1.048.576 filas por hoja (encabezado incluido): se parte en varias hojas
-const FILAS_POR_HOJA = 1000000;
 
 const COLUMNAS_INVERSOR = [
     'Vpv1', 'Vpv2', 'Ipv1', 'Ipv2',
@@ -34,54 +31,23 @@ const COLUMNAS_INVERSOR = [
     'Pac', 'EnergyToday',
 ];
 
-header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+const ENCABEZADOS_DASHBOARD = [
+    'fecha_hora',
+    ...COLUMNAS_INVERSOR,
+    'temperatura', 'irradiancia',
+];
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+prepararEndpoint();
 
-function responderJson(int $codigo, string $mensaje, ?string $debug = null): void
-{
-    http_response_code($codigo);
-    echo json_encode(['success' => false, 'message' => $mensaje, 'debug' => $debug]);
-    exit();
-}
-
-function conectar(): PDO
-{
-    $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../../');
-    $dotenv->safeLoad();
-
-    $host = $_ENV['DB_HOST'] ?? 'localhost';
-    $dbname = $_ENV['DB_NAME'] ?? 'labvirtual';
-    $user = $_ENV['DB_USER'] ?? 'root';
-    $pass = $_ENV['DB_PASSWORD'] ?? '';
-
-    return new PDO(
-        "mysql:host=$host;dbname=$dbname;charset=utf8mb4",
-        $user,
-        $pass,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-        ]
-    );
-}
-
-function obtenerSensorEnRango(PDO $pdo, string $start, string $end): array
+function obtenerSensorEnRango(PDO $pdo, string $desde, string $hasta): array
 {
     $stmt = $pdo->prepare("
         SELECT fecha_hora, temperatura, irradiancia
         FROM datos_irradiancia
-        WHERE fecha_hora BETWEEN :start AND :end
+        WHERE fecha_hora BETWEEN :desde AND :hasta
         ORDER BY fecha_hora ASC
     ");
-    $stmt->execute([':start' => $start, ':end' => $end]);
+    $stmt->execute([':desde' => $desde, ':hasta' => $hasta]);
     return $stmt->fetchAll();
 }
 
@@ -105,7 +71,8 @@ function obtenerSensorCercano(PDO $pdo, string $start, string $end): array
 }
 
 // Registros del inversor entre $desde y $hasta, ampliado en la tolerancia hacia
-// ambos lados para poder emparejar las lecturas de los bordes.
+// ambos lados para poder emparejar las lecturas de los bordes (también en el
+// borde entre dos meses).
 function obtenerInversorAlrededor(PDO $pdo, string $desde, string $hasta): array
 {
     $columnas = implode(', ', COLUMNAS_INVERSOR);
@@ -151,57 +118,31 @@ function alinearConInversor(array $sensor, array $inversor): array
     return $filas;
 }
 
-function enviarExcel(array $filas, string $prefijoArchivo): void
-{
-    $encabezados = array_merge(['fecha_hora'], COLUMNAS_INVERSOR, ['temperatura', 'irradiancia']);
-    $spreadsheet = new Spreadsheet();
-
-    foreach (array_chunk($filas, FILAS_POR_HOJA) as $i => $bloque) {
-        $hoja = $i === 0 ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
-        $hoja->setTitle('Datos ' . ($i + 1));
-
-        $matriz = [$encabezados];
-        foreach ($bloque as $fila) {
-            $matriz[] = array_map(
-                fn($columna) => $columna === 'fecha_hora'
-                    ? $fila[$columna]
-                    : ($fila[$columna] === null ? 0 : round((float) $fila[$columna], 2)),
-                $encabezados
-            );
-        }
-        $hoja->fromArray($matriz, null, 'A1', true);
-        unset($matriz);
-    }
-    unset($filas);
-
-    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    header('Content-Disposition: attachment;filename="' . $prefijoArchivo . date('Y-m-d_His') . '.xlsx"');
-    header('Cache-Control: max-age=0');
-    (new Xlsx($spreadsheet))->save('php://output');
-    exit();
-}
-
 try {
     $input = json_decode(file_get_contents('php://input'), true) ?? [];
-    $start = $input['start'] ?? $_GET['start'] ?? null;
-    $end = $input['end'] ?? $_GET['end'] ?? null;
-
-    if (!$start || !$end) {
-        responderJson(400, 'Faltan parámetros de fecha.');
-    }
-
-    // Rangos de años (millones de filas): ver también proxy_read_timeout de nginx para /app/api/
-    ini_set('memory_limit', '4096M');
-    set_time_limit(1800);
-
+    [$inicio, $fin] = leerRango($input);
     $pdo = conectar();
+    $tramos = mesesDelRango($inicio, $fin);
 
-    $sensor = obtenerSensorEnRango($pdo, $start, $end);
-    if (!empty($sensor)) {
-        $inversor = obtenerInversorAlrededor($pdo, $sensor[0]['fecha_hora'], end($sensor)['fecha_hora']);
-        enviarExcel(alinearConInversor($sensor, $inversor), 'datos_dashboard_');
+    if (!empty($tramos) && hayDatos($pdo, 'datos_irradiancia', $tramos[0]['desde'], end($tramos)['hasta'])) {
+        $excel = new ExcelPorMeses(ENCABEZADOS_DASHBOARD, 'datos_dashboard_' . date('Y-m-d_His') . '.xlsx');
+        foreach ($tramos as $tramo) {
+            $sensor = obtenerSensorEnRango($pdo, $tramo['desde'], $tramo['hasta']);
+            if (empty($sensor)) {
+                continue; // meses sin datos no generan hoja vacía
+            }
+            $inversor = obtenerInversorAlrededor($pdo, $sensor[0]['fecha_hora'], end($sensor)['fecha_hora']);
+            $excel->nuevaHoja($tramo['etiqueta']);
+            foreach (alinearConInversor($sensor, $inversor) as $fila) {
+                $excel->agregarFila($fila);
+            }
+            unset($sensor, $inversor);
+        }
+        $excel->cerrar();
     }
 
+    $start = $inicio->format('Y-m-d H:i:s');
+    $end = $fin->format('Y-m-d H:i:s');
     $sensor = obtenerSensorCercano($pdo, $start, $end);
     if (empty($sensor)) {
         // 200 sin Excel: exportar.js lo interpreta como "sin datos", no como error
@@ -214,12 +155,12 @@ try {
     foreach ($sensor as $lectura) {
         $inversor = array_merge($inversor, obtenerInversorAlrededor($pdo, $lectura['fecha_hora'], $lectura['fecha_hora']));
     }
-    enviarExcel(alinearConInversor($sensor, $inversor), 'datos_dashboard_cercanos_');
-} catch (\Throwable $e) {
-    error_log('exportar_datos_dashboard.php: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
-    $debug = ($_ENV['APP_DEBUG'] ?? '') === 'true' ? $e->getMessage() : null;
-    if (!headers_sent()) {
-        header('Content-Type: application/json');
+    $excel = new ExcelPorMeses(ENCABEZADOS_DASHBOARD, 'datos_dashboard_cercanos_' . date('Y-m-d_His') . '.xlsx');
+    $excel->nuevaHoja('Cercanos');
+    foreach (alinearConInversor($sensor, $inversor) as $fila) {
+        $excel->agregarFila($fila);
     }
-    responderJson(500, 'Error al exportar los datos del dashboard. Por favor, intente nuevamente.', $debug);
+    $excel->cerrar();
+} catch (\Throwable $e) {
+    fallarExportacion($e, 'exportar_datos_dashboard.php', 'Error al exportar los datos del dashboard. Por favor, intente nuevamente.');
 }

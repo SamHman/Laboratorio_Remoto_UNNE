@@ -171,6 +171,15 @@ function horaFueraDeVentana(fecha_hora) {
 // Factor de calibración del piranómetro: multiplica el valor crudo de irradiancia (col C) antes de guardarlo.
 const K_IRRADIANCIA = 20.4112;
 
+// Lecturas crudas de irradiancia (col C, en mV, ANTES de multiplicar por K) que NO se
+// guardan (2026-11-25) - la fila entera se descarta, así no ensucia dashboard ni Excel:
+// - >= 255.99: escala completa del ADS1115 (255.992 mV). Es lo que lee el canal con la
+//   entrada al aire (piranómetro desconectado); daría ~5.225 W/m², físicamente imposible.
+// - < 0: no tiene sentido físico. Incluye -256, que el datalogger usa cuando el canal no
+//   respondió por I2C. (Antes los negativos se guardaban como 0; ahora se descartan.)
+// La temperatura no se filtra: 0 °C y negativos son valores reales posibles.
+const IRRADIANCIA_SATURADA_MV = 255.99;
+
 const UPSERT_CHUNK_SIZE = 500;
 
 // Fecha de corte "YYYY-MM-DD 00:00:00" en hora Argentina (UTC-3, sin horario de
@@ -250,6 +259,8 @@ async function syncOnce(serviceAccountKey, spreadsheetId, diasVentana) {
 
     const toUpsert = [];
     let descartadasPorHorario = 0;
+    let descartadasSaturadas = 0;
+    let descartadasNegativas = 0;
     for (const row of rows) {
         // La API de Sheets omite las celdas vacías del final de la fila: una columna
         // ausente llega como undefined y parseDecimalComa la convierte en null
@@ -265,7 +276,14 @@ async function syncOnce(serviceAccountKey, spreadsheetId, diasVentana) {
         }
         let irr = parseDecimalComa(rawIrr);
         if (irr !== null) {
-            if (irr < 0) irr = 0;
+            if (irr >= IRRADIANCIA_SATURADA_MV) {
+                descartadasSaturadas++;
+                continue;
+            }
+            if (irr < 0) {
+                descartadasNegativas++;
+                continue;
+            }
             irr = Math.round(irr * K_IRRADIANCIA * 10000) / 10000;
         }
         toUpsert.push([fecha_hora, irr, parseDecimalComa(rawTemp)]);
@@ -282,6 +300,9 @@ async function syncOnce(serviceAccountKey, spreadsheetId, diasVentana) {
     }
     if (descartadasPorHorario > 0) {
         console.log(`[irradianciaSync] ${descartadasPorHorario} fila(s) descartada(s) por estar fuera del horario ${HORA_INICIO_VALIDA}-${HORA_FIN_VALIDA}`);
+    }
+    if (descartadasSaturadas > 0 || descartadasNegativas > 0) {
+        console.log(`[irradianciaSync] Descartadas por irradiancia inválida: ${descartadasSaturadas} saturada(s) (>= ${IRRADIANCIA_SATURADA_MV} mV, piranómetro desconectado), ${descartadasNegativas} negativa(s)`);
     }
     // Recién después de un ciclo exitoso: si el primero falla (Google caído,
     // credencial mal), el próximo vuelve a intentar el Sheet completo, y si falla

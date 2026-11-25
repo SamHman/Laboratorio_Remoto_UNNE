@@ -68,9 +68,11 @@ services:
       dockerfile: Dockerfile.php
     container_name: labvirtualunne_php
     restart: unless-stopped
-    # Tope duro de RAM (exportaciones grandes a Excel): VPS compartida con otros clientes
-    mem_limit: 4g
-    memswap_limit: 4g
+    # Tope duro de RAM. Desde 2026-11-25 la exportación a Excel va por meses y en streaming
+    # (app/includes/exportar_excel.php): cada pedido usa decenas de MB (memory_limit 512M)
+    # aunque se exporten años. Antes hacía falta 4g porque PhpSpreadsheet armaba todo en memoria.
+    mem_limit: 1g
+    memswap_limit: 1g
     depends_on:
       mysql:
         condition: service_healthy

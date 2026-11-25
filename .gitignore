@@ -12,3 +12,6 @@ deploy.bat
 # Documentación y plantilla de entorno: solo locales, no se publican (2026-11-25)
 *.md
 .env_EJEMPLO
+
+# .env de produccion (secretos reales del deploy): nunca se publica (2026-11-25)
+.env.*
